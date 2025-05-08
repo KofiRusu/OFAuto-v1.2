@@ -1,0 +1,50 @@
+name: Vercel Preview Deployment for OFAuto0.2
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  vercel-preview:
+    name: Deploy Preview to Vercel
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ⬇️ Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: 🛠️ Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: 📦 Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: 🚀 Deploy to Vercel (Preview)
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: ./
+          scope: ofauto0-2
+          alias-domains: |
+            ofauto0-2-preview.vercel.app
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          vercel-args: '--prod=false'
+
+      - name: 💬 Comment Preview URL on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          message: |
+            ✅ **Preview Deployment Ready!**
+            🔗 [View Deployment](https://ofauto0-2-preview.vercel.app)
+            ![Preview Status](https://img.shields.io/badge/vercel-deployed-brightgreen?style=flat&logo=vercel)
+
+      - name: 🏷️ Label Pull Request
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: preview 

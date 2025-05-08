@@ -1,0 +1,710 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String              @id @default(cuid())
+  email             String?             @unique
+  name              String?
+  clerkId           String              @unique
+  password          String?             // For email/password auth
+  tokenVersion      Int                 @default(1) // For auth token invalidation
+  role              UserRole            @default(USER)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  avatar            String?
+  automations       Automation[]
+  campaigns         Campaign[]
+  clients           Client[]
+  platforms         Platform[]
+  onboardingProfile OnboardingProfile?
+  bankAccounts      BankAccount[]
+  modelContracts    Contract[]          @relation("ModelContracts")
+  managerContracts  Contract[]          @relation("ManagerContracts")
+  commissionsOwned  CommissionSplit[]   @relation("CommissionOwner")
+  commissionsShared CommissionSplit[]   @relation("CommissionSharer")
+  reviewsCreated    KycReview[]         @relation("Reviewer")
+  kycDocuments      KycDocument[]       @relation("UserDocuments")
+  reviewedDocuments KycDocument[]       @relation("DocumentReviewer")
+  referralsMade     Referral[]          @relation("ReferralsMade")
+  referralsReceived Referral[]          @relation("ReferralsReceived")
+  mediaAssets       MediaAsset[]
+  watermarkProfiles WatermarkProfile[]
+  complianceReports ComplianceReport[]
+  taxForms          TaxForm[]
+  chatbotPersonas   ChatbotPersona[]    // Relation for Phase 10
+  chatbotAutomations ChatbotAutomation[] // Relation for Phase 10
+  activityLogs      ActivityLog[]
+  financialMetrics  FinancialMetric[]
+  driveCredentials  DriveCredential[]   // Relation for Phase 10c
+  performanceReports PerformanceReport[] // Relation for Phase 10d
+  platformAccess    PlatformAccess[]    // Relation for Phase 10d
+  notifications     Notification[]      // Relation for Phase 10d Step 5
+  kpis              KPI[]
+  linktreeConfig    LinktreeConfig?     // Relation for Phase 10d Step 8
+  passwordResets    PasswordReset[]     // Relation for auth system
+
+  @@index([clerkId])
+}
+
+model DriveCredential {
+  id          String   @id @default(uuid())
+  userId      String
+  accessToken String
+  refreshToken String
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+}
+
+model Client {
+  id          String       @id @default(uuid())
+  name        String
+  email       String?
+  phone       String?
+  userId      String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  status      String       @default("active")
+  referralCode String?     @unique
+  orgSettings Json?        @default("{}")
+  automations Automation[]
+  campaigns   Campaign[]
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platforms   Platform[]
+  crmConnections CrmConnection[]
+  quickBooksConnections QuickBooksConnection[]
+  financialMetrics FinancialMetric[]
+
+  @@index([userId])
+}
+
+model Platform {
+  id            String         @id @default(cuid())
+  type          String
+  name          String
+  userId        String
+  clientId      String?
+  status        PlatformStatus @default(PENDING)
+  lastCheckedAt DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  username      String?
+  client        Client?        @relation(fields: [clientId], references: [id])
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaigns     Campaign[]     @relation("CampaignToPlatform")
+  accessControl PlatformAccess[] // Relation for Phase 10d
+
+  @@index([userId])
+  @@index([clientId])
+  @@index([type])
+  @@index([status])
+}
+
+model Automation {
+  id          String   @id @default(uuid())
+  name        String
+  trigger     String
+  action      String
+  isActive    Boolean  @default(true)
+  clientId    String
+  createdById String
+  config      Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation(fields: [createdById], references: [id])
+
+  @@index([clientId])
+  @@index([createdById])
+  @@index([isActive])
+}
+
+model Campaign {
+  id          String         @id @default(uuid())
+  name        String
+  platform    String
+  budget      Int?
+  startDate   DateTime
+  endDate     DateTime?
+  status      CampaignStatus @default(DRAFT)
+  clientId    String
+  createdById String
+  metrics     Json?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  client      Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy   User           @relation(fields: [createdById], references: [id])
+  platforms   Platform[]     @relation("CampaignToPlatform")
+
+  @@index([clientId])
+  @@index([createdById])
+  @@index([status])
+  @@index([platform])
+}
+
+model OnboardingProfile {
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  fullName            String
+  phoneNumber         String
+  address             String
+  city                String
+  state               String
+  zipCode             String
+  country             String
+  dateOfBirth         DateTime
+  taxId               String?   // SSN or Tax ID Number (encrypted)
+  identificationUrl   String?   // URL to ID document
+  identificationVerified Boolean @default(false)
+  addressVerified     Boolean   @default(false)
+  kycStatus           KycStatus @default(PENDING)
+  kycCompletedAt      DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviews             KycReview[]
+  
+  @@index([userId])
+  @@index([kycStatus])
+}
+
+model BankAccount {
+  id                  String    @id @default(cuid())
+  userId              String
+  accountHolderName   String
+  accountType         BankAccountType
+  accountNumber       String    // Encrypted
+  routingNumber       String    // Encrypted
+  bankName            String
+  verified            Boolean   @default(false)
+  primary             Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+}
+
+model CommissionSplit {
+  id                  String    @id @default(cuid())
+  ownerId             String    // User who owns the account/gets commission
+  sharerId            String    // User who shares their commission
+  percentage          Float     // Percentage of commission shared (0-100)
+  startDate           DateTime  @default(now())
+  endDate             DateTime?
+  active              Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  owner               User      @relation("CommissionOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  sharer              User      @relation("CommissionSharer", fields: [sharerId], references: [id], onDelete: Cascade)
+  
+  @@index([ownerId])
+  @@index([sharerId])
+  @@index([active])
+}
+
+model Contract {
+  id                  String    @id @default(uuid())
+  modelId             String
+  managerId           String
+  documentUrl         String
+  status              ContractStatus @default(PENDING)
+  signedAt            DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  model               User      @relation("ModelContracts", fields: [modelId], references: [id])
+  manager             User      @relation("ManagerContracts", fields: [managerId], references: [id])
+  
+  @@index([modelId])
+  @@index([managerId])
+  @@index([status])
+}
+
+model KycReview {
+  id                  String           @id @default(cuid())
+  profileId           String
+  reviewerId          String
+  status              KycReviewStatus
+  reason              String?          // renamed from 'notes'
+  rejectionReason     String?
+  documentUrls        String[]         // URLs to any additional documents requested/uploaded
+  reviewedAt          DateTime?        // added field to track when the review was completed
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  profile             OnboardingProfile @relation(fields: [profileId], references: [id])
+  reviewer            User             @relation("Reviewer", fields: [reviewerId], references: [id])
+  
+  @@index([profileId])
+  @@index([reviewerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model KycDocument {
+  id          String     @id @default(uuid())
+  userId      String
+  type        KycType
+  fileUrl     String
+  status      KycStatus  @default(PENDING)
+  submittedAt DateTime   @default(now())
+  reviewedAt  DateTime?
+  reviewerId  String?
+
+  user     User        @relation("UserDocuments", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer User?       @relation("DocumentReviewer", fields: [reviewerId], references: [id])
+  
+  @@index([userId])
+  @@index([reviewerId])
+  @@index([type])
+  @@index([status])
+}
+
+model Referral {
+  id           String           @id @default(uuid())
+  referrerId   String
+  refereeId    String
+  createdAt    DateTime         @default(now())
+  status       ReferralStatus   @default(PENDING)
+
+  referrer     User             @relation("ReferralsMade", fields: [referrerId], references: [id])
+  referee      User             @relation("ReferralsReceived", fields: [refereeId], references: [id])
+  bonuses      ReferralBonus[]
+
+  @@index([referrerId])
+  @@index([refereeId])
+  @@index([status])
+}
+
+model ReferralBonus {
+  id           String           @id @default(uuid())
+  referralId   String
+  amount       Float
+  currency     String           @default("USD")
+  paid         Boolean          @default(false)
+  paidAt       DateTime?
+  createdAt    DateTime         @default(now())
+  
+  referral     Referral         @relation(fields: [referralId], references: [id], onDelete: Cascade)
+  
+  @@index([referralId])
+  @@index([paid])
+}
+
+model MediaAsset {
+  id          String    @id @default(uuid())
+  url         String
+  ownerId     String
+  createdAt   DateTime  @default(now())
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  watermarks  WatermarkedMedia[]
+  
+  @@index([ownerId])
+}
+
+model WatermarkProfile {
+  id          String    @id @default(uuid())
+  name        String
+  logoUrl     String
+  opacity     Float     @default(0.5)
+  position    String    @default("bottomRight") // topLeft, topRight, bottomLeft, bottomRight, center
+  ownerId     String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  watermarks  WatermarkedMedia[]
+  
+  @@index([ownerId])
+}
+
+model WatermarkedMedia {
+  id                String    @id @default(uuid())
+  originalMediaId   String
+  watermarkProfileId String
+  processedUrl      String
+  createdAt         DateTime  @default(now())
+  
+  originalMedia     MediaAsset       @relation(fields: [originalMediaId], references: [id], onDelete: Cascade)
+  watermarkProfile  WatermarkProfile @relation(fields: [watermarkProfileId], references: [id], onDelete: Cascade)
+  
+  @@index([originalMediaId])
+  @@index([watermarkProfileId])
+}
+
+model Trend {
+  id         String       @id @default(uuid())
+  name       String
+  source     String       // e.g., "Twitter", "TikTok"
+  detectedAt DateTime     @default(now())
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  metrics    TrendMetric[]
+  
+  @@index([source])
+  @@index([detectedAt])
+}
+
+model TrendMetric {
+  id        String   @id @default(uuid())
+  trendId   String
+  platform  String
+  value     Float    // e.g., engagement score
+  timestamp DateTime @default(now())
+
+  trend     Trend    @relation(fields: [trendId], references: [id], onDelete: Cascade)
+  
+  @@index([trendId])
+  @@index([platform])
+  @@index([timestamp])
+}
+
+model ComplianceReport {
+  id          String       @id @default(uuid())
+  reporterId  String
+  type        ReportType
+  contentId   String?      // e.g. message or post ID
+  details     String
+  status      ReportStatus @default(PENDING)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  
+  reporter    User         @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  takedowns   TakedownRequest[]
+  
+  @@index([reporterId])
+  @@index([status])
+  @@index([type])
+}
+
+model TakedownRequest {
+  id          String        @id @default(uuid())
+  reportId    String
+  requestedBy String
+  status      RequestStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  report      ComplianceReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  
+  @@index([reportId])
+  @@index([status])
+}
+
+model CrmConnection {
+  id           String   @id @default(uuid())
+  clientId     String
+  apiKey       String
+  domain       String
+  status       ConnectionStatus @default(PENDING)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  client       Client   @relation(fields: [clientId], references: [id])
+  
+  @@index([clientId])
+  @@index([status])
+}
+
+model QuickBooksConnection {
+  id           String   @id @default(uuid())
+  clientId     String
+  realmId      String
+  accessToken  String
+  refreshToken String
+  status       ConnectionStatus @default(PENDING)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  client       Client   @relation(fields: [clientId], references: [id])
+  
+  @@index([clientId])
+  @@index([status])
+}
+
+model TaxForm {
+  id           String       @id @default(uuid())
+  userId       String
+  year         Int
+  type         TaxFormType
+  pdfUrl       String?
+  generatedAt  DateTime     @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([year])
+  @@index([type])
+}
+
+model ChatbotPersona {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  systemPrompt String   @db.Text
+  createdById String
+  roleConfig  Json?    // New field for Phase 10
+  voiceConfig Json?    // New field for Phase 10
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  automations ChatbotAutomation[]
+  
+  @@index([createdById])
+}
+
+model ChatbotAutomation {
+  id          String   @id @default(uuid())
+  name        String
+  personaId   String
+  triggerType String   // e.g. "ON_SCHEDULE", "ON_EVENT"
+  triggerData Json
+  actions     Json     // sequence of prompts or API calls
+  isActive    Boolean  @default(true)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  persona     ChatbotPersona @relation(fields: [personaId], references: [id])
+  creator     User           @relation(fields: [createdBy], references: [id])
+  
+  @@index([personaId])
+  @@index([createdBy])
+  @@index([isActive])
+}
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  userId      String
+  actionType  String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([actionType])
+  @@index([createdAt])
+}
+
+model PerformanceReport {
+  id          String   @id @default(uuid())
+  modelId     String
+  periodStart DateTime
+  periodEnd   DateTime
+  metrics     Json      // e.g. { earnings: number, posts: number, engagement: number }
+  createdAt   DateTime  @default(now())
+
+  model       User      @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  
+  @@index([modelId])
+  @@index([periodStart])
+  @@index([periodEnd])
+}
+
+model FinancialMetric {
+  id          String   @id @default(uuid())
+  userId      String?
+  clientId    String?
+  category    String
+  amount      Float
+  currency    String   @default("USD")
+  date        DateTime
+  description String?
+  trend       Float?
+  variance    Float?
+  createdAt   DateTime @default(now())
+  
+  user        User?    @relation(fields: [userId], references: [id])
+  client      Client?  @relation(fields: [clientId], references: [id])
+  
+  @@index([userId])
+  @@index([clientId])
+  @@index([category])
+  @@index([date])
+}
+
+model PlatformAccess {
+  id         String    @id @default(uuid())
+  userId     String
+  platformId String
+  approved   Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform   Platform  @relation(fields: [platformId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, platformId])
+  @@index([userId])
+  @@index([platformId])
+  @@index([approved])
+}
+
+model Notification {
+  id         String    @id @default(uuid())
+  userId     String
+  type       String
+  title      String
+  message    String
+  payload    Json?
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([type])
+  @@index([readAt])
+  @@index([createdAt])
+}
+
+model KPI {
+  id           String    @id @default(uuid())
+  userId       String
+  name         String
+  targetValue  Float
+  currentValue Float     @default(0)
+  dueDate      DateTime?
+  status       String    @default("IN_PROGRESS") // e.g. IN_PROGRESS, COMPLETED, AT_RISK
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model LinktreeConfig {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  links     Json     // array of { title: string; url: string }
+  theme     String?  // optional theme slug
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+}
+
+model OtpCode {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  code      String
+  type      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email, type])
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  token     String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([token])
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  MODEL    // New role for Phase 10
+  USER
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum PlatformStatus {
+  PENDING
+  ACTIVE
+  ERROR
+  DISCONNECTED
+}
+
+enum KycStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  REVIEW
+}
+
+enum BankAccountType {
+  CHECKING
+  SAVINGS
+}
+
+enum ContractStatus {
+  PENDING
+  SIGNED
+  REJECTED
+}
+
+enum KycReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ADDITIONAL_INFO_REQUESTED
+}
+
+enum KycType {
+  ID_FRONT
+  ID_BACK
+  TAX_FORM
+}
+
+enum ReferralStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum ReportType {
+  DM_CONTENT
+  POST_CONTENT
+  PROFILE_CONTENT
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  RESOLVED
+}
+
+enum RequestStatus {
+  PENDING
+  COMPLETED
+  REJECTED
+}
+
+enum ConnectionStatus {
+  PENDING
+  CONNECTED
+  FAILED
+}
+
+enum TaxFormType {
+  US_1099
+  EU_VAT
+  OTHER
+}

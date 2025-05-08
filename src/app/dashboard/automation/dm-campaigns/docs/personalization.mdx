@@ -1,0 +1,83 @@
+# Personalization with Fallback Chains
+
+Personalization is a powerful way to make your direct messages more engaging and relevant to your audience. OFAuto supports a robust personalization system with fallback chains, ensuring your messages always look professional even when some data is missing.
+
+## Basic Personalization
+
+To personalize a message, use the `{{variableName}}` syntax in your templates. For example:
+
+```
+Hey {{firstName}}, thanks for following me on {{platform}}! 
+Check out my exclusive content at {{profileUrl}}.
+```
+
+When the message is sent, the variables are replaced with actual values. If a value isn't available, a fallback value is used.
+
+## Fallback Chains
+
+Fallback chains let you specify multiple variables to try in sequence until a non-empty value is found. This is especially useful when you don't know which information will be available for each user.
+
+### Syntax
+
+Use the pipe character (`|`) to separate variables in your fallback chain:
+
+```
+{{firstName|username|follower}}
+```
+
+### How It Works
+
+1. The system first tries to use `firstName`
+2. If `firstName` is empty or not available, it tries `username`
+3. If `username` is also empty, it uses `follower`
+4. If all values in the chain are empty, it uses an empty string or a global fallback value
+
+### Example
+
+Template:
+```
+Hi {{firstName|username|"friend"}}, thanks for your interest in my content!
+```
+
+Possible outputs:
+- If firstName="John": "Hi John, thanks for your interest in my content!"
+- If firstName="" and username="user123": "Hi user123, thanks for your interest in my content!"
+- If both are empty: "Hi friend, thanks for your interest in my content!"
+
+## Setting Default Values
+
+In the campaign settings, you can set default fallback values for any variable. These values are used when the variable isn't available and there's no successful fallback in the chain.
+
+## Common Personalization Variables
+
+The following variables are commonly available:
+
+- `{{firstName}}` - User's first name
+- `{{username}}` - User's username on the platform
+- `{{platform}}` - The platform name (e.g., "OnlyFans", "Instagram")
+- `{{profileUrl}}` - Your profile URL on the platform
+- `{{subscriptionDays}}` - Days remaining in the user's subscription
+- `{{lastInteraction}}` - Date of last interaction with the user
+
+## Custom Variables
+
+You can also create custom variables with your own values. These custom variables can be used in templates and as fallbacks for standard variables.
+
+## Best Practices
+
+1. Always use fallback chains for important parts of your message
+2. Set meaningful default values for all variables used in your templates
+3. Keep your templates concise and personal
+4. Test your templates with the preview feature before activating a campaign
+5. Use variables that make sense for your audience and the platform
+
+## Technical Details
+
+Fallback chains are processed from left to right. The system will use the first non-empty value it finds. Values are considered empty if they are:
+
+- `undefined`
+- `null` 
+- An empty string (`""`)
+- Not found in the personalization data
+
+When designing your templates, consider nesting fallbacks for the most important pieces of information, such as names and personal details that significantly impact the flow of your message. 

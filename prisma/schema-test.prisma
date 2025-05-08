@@ -1,0 +1,130 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  USER
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum PlatformStatus {
+  PENDING
+  ACTIVE
+  ERROR
+  DISCONNECTED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  name          String?
+  clerkId       String    @unique
+  role          UserRole  @default(USER)
+  avatar        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  clients       Client[]
+  platforms     Platform[]
+  automations   Automation[]
+  campaigns     Campaign[]
+  
+  @@index([clerkId])
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?
+  phone     String?
+  status    String   @default("active")
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platforms   Platform[]
+  automations Automation[]
+  campaigns   Campaign[]
+
+  @@index([userId])
+}
+
+model Platform {
+  id            String          @id @default(cuid())
+  type          String          // TWITTER, INSTAGRAM, ONLYFANS, etc.
+  name          String
+  username      String?
+  userId        String
+  clientId      String?
+  status        PlatformStatus  @default(PENDING)
+  lastCheckedAt DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client    Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  campaigns Campaign[]
+
+  @@index([userId])
+  @@index([clientId])
+  @@index([type])
+  @@index([status])
+}
+
+model Automation {
+  id          String   @id @default(uuid())
+  name        String
+  trigger     String
+  action      String
+  isActive    Boolean  @default(true)
+  clientId    String
+  createdById String
+  config      Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation(fields: [createdById], references: [id])
+
+  @@index([clientId])
+  @@index([createdById])
+  @@index([isActive])
+}
+
+model Campaign {
+  id          String         @id @default(uuid())
+  name        String
+  platform    String
+  budget      Int?
+  startDate   DateTime
+  endDate     DateTime?
+  status      CampaignStatus @default(DRAFT)
+  clientId    String
+  createdById String
+  metrics     Json?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  client      Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy   User           @relation(fields: [createdById], references: [id])
+  platforms   Platform[]
+
+  @@index([clientId])
+  @@index([createdById])
+  @@index([status])
+  @@index([platform])
+} 

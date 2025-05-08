@@ -1,0 +1,30 @@
+# Simple Dockerfile for OFAuto
+# This version does not require Next.js build to succeed
+
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install dependencies
+COPY package.json package-lock.json ./
+RUN npm install --legacy-peer-deps
+
+# Copy application code
+COPY . .
+
+# Add curl for healthchecks
+RUN apk --no-cache add curl
+
+# Expose port
+EXPOSE 3000
+
+# Set environment variables
+ENV NODE_ENV=development
+ENV PORT=3000
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
+
+# Start the development server
+CMD ["npm", "run", "dev"] 

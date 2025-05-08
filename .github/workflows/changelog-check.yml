@@ -1,0 +1,21 @@
+name: Changelog Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  changelog_check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify changelog presence
+        run: |
+          if ! git diff --name-only origin/main...HEAD | grep -i 'changelog'; then
+            echo "❌ Changelog file missing in PR. Please add a changelog before merging."
+            exit 1
+          else
+            echo "✅ Changelog file detected. Proceeding."
+          fi

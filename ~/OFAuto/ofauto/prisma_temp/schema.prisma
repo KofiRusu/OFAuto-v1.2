@@ -1,0 +1,87 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User roles for the system
+enum UserRole {
+  USER
+  MANAGER
+  ADMIN
+}
+
+// User model for authentication and management
+model User {
+  id        String   @id @default(uuid())
+  clerkId   String   @unique
+  email     String   @unique
+  name      String?
+  role      UserRole @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  clients         Client[]
+  platforms       Platform[]
+  chatbotPersonas ChatbotPersona[]
+  chatbotFeedback ChatbotMessageFeedback[]
+}
+
+// Clients managed in the system
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?
+  phone     String?
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platforms           Platform[]
+  engagementMetrics   EngagementMetric[]
+  financialMetrics    FinancialMetric[]
+  dashboardMetrics    DashboardMetric[]
+  scheduledTasks      ScheduledTask[]
+  credentials         ClientCredential[]
+  insights            Insight[]
+  scheduledPosts      ScheduledPost[]
+  autoDMTasks         AutoDMTask[]
+  campaignExperiments CampaignExperiment[]
+  persona             ClientPersona?
+  chatbotPersonas     ChatbotPersona[]
+  chatbotFeedback     ChatbotMessageFeedback[]
+}
+
+// Social media platforms
+model Platform {
+  id                  String    @id @default(uuid())
+  clientId            String
+  userId              String
+  platformType        String    // e.g., "onlyfans", "instagram", "twitter"
+  username            String
+  accessToken         String?
+  refreshToken        String?
+  tokenExpiresAt      DateTime?
+  isActive            Boolean   @default(true)
+  lastFollowerCheckAt DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  // Relations
+  client            Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  engagementMetrics EngagementMetric[]
+  scheduledTasks    ScheduledTask[]
+  automationTriggers AutomationTrigger[]
+  
+  @@unique([clientId, platformType])
+} 

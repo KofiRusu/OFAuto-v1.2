@@ -1,0 +1,102 @@
+name: Deploy to Amazon ECR
+
+on:
+  push:
+    branches: [ main, production ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      
+      - name: Extract branch name
+        shell: bash
+        run: echo "BRANCH_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+      
+      - name: Set image tags
+        id: set-tags
+        run: |
+          # Set timestamp for unique tag
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          
+          # Set repository name based on branch or workflow dispatch input
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+          elif [ "${{ env.BRANCH_NAME }}" == "main" ]; then
+            ENV="staging"
+          elif [ "${{ env.BRANCH_NAME }}" == "production" ]; then
+            ENV="production"
+          else
+            ENV="dev"
+          fi
+          
+          # Set repository and tags
+          REPO_NAME="ofauto-${ENV}"
+          TAG_LATEST="${{ steps.login-ecr.outputs.registry }}/${REPO_NAME}:latest"
+          TAG_TIMESTAMP="${{ steps.login-ecr.outputs.registry }}/${REPO_NAME}:${TIMESTAMP}"
+          
+          # Set outputs
+          echo "repo_name=${REPO_NAME}" >> $GITHUB_OUTPUT
+          echo "tag_latest=${TAG_LATEST}" >> $GITHUB_OUTPUT 
+          echo "tag_timestamp=${TAG_TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "env=${ENV}" >> $GITHUB_OUTPUT
+      
+      - name: Create ECR repository if not exists
+        run: |
+          aws ecr describe-repositories --repository-names ${{ steps.set-tags.outputs.repo_name }} || \
+          aws ecr create-repository --repository-name ${{ steps.set-tags.outputs.repo_name }}
+      
+      - name: Set up Docker build arguments
+        id: docker-args
+        run: |
+          echo "build_args=--build-arg NODE_ENV=production" >> $GITHUB_OUTPUT
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile.simple
+          push: true
+          tags: |
+            ${{ steps.set-tags.outputs.tag_latest }}
+            ${{ steps.set-tags.outputs.tag_timestamp }}
+          build-args: |
+            NODE_ENV=production
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Deployment summary
+        run: |
+          echo "✅ Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Environment: ${{ steps.set-tags.outputs.env }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Repository: ${{ steps.set-tags.outputs.repo_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Latest Tag: ${{ steps.set-tags.outputs.tag_latest }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Timestamp Tag: ${{ steps.set-tags.outputs.tag_timestamp }}" >> $GITHUB_STEP_SUMMARY 

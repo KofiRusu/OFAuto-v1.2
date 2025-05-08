@@ -1,0 +1,32 @@
+{
+  "name": "onlyfans-bot",
+  "version": "1.0.0",
+  "description": "Puppeteer-based automation module for OnlyFans, designed to work with OFAuto",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "login": "ts-node loginAndSaveSession.ts",
+    "post": "ts-node onlyfansAutomation.ts",
+    "chat": "ts-node chatAutomation.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "onlyfans",
+    "automation",
+    "puppeteer",
+    "ofauto"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "puppeteer": "^24.6.1",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.4",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.3.2"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "AlarmName": "HighErrorRateAlarm",
+  "AlarmDescription": "Alarm when error rate exceeds 1% of total requests",
+  "MetricName": "ErrorCount",
+  "Namespace": "OFAuto/API",
+  "Statistic": "Sum",
+  "Period": 60,
+  "EvaluationPeriods": 5,
+  "Threshold": 50,
+  "ComparisonOperator": "GreaterThanThreshold",
+  "AlarmActions": [
+    "arn:aws:sns:us-east-1:123456789012:PagerDutyAlerts"
+  ],
+  "InsufficientDataActions": [],
+  "OKActions": [],
+  "TreatMissingData": "notBreaching"
+} 

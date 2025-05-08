@@ -1,0 +1,266 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Main colors */
+    --background: 220 20% 98%;
+    --foreground: 220 30% 10%;
+    
+    /* Card colors */
+    --card: 0 0% 100%;
+    --card-foreground: 220 30% 10%;
+    
+    /* Popover colors */
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 30% 10%;
+    
+    /* Primary colors */
+    --primary: 224 83% 57%;
+    --primary-rgb: 59, 100, 224;
+    --primary-foreground: 0 0% 100%;
+    --primary-light: 224 90% 94%;
+    --primary-dark: 225 86% 49%;
+    
+    /* Secondary colors */
+    --secondary: 256 80% 65%;
+    --secondary-foreground: 0 0% 100%;
+    
+    /* Muted colors */
+    --muted: 220 15% 95%;
+    --muted-foreground: 220 10% 40%;
+    
+    /* Accent colors */
+    --accent: 224 90% 94%;
+    --accent-foreground: 224 90% 35%;
+    
+    /* Destructive colors */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    /* Success, warning colors */
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    
+    /* Border and input colors */
+    --border: 220 15% 91%;
+    --input: 220 15% 91%;
+    --ring: 224 83% 57%;
+    
+    /* Border radius */
+    --radius: 0.5rem;
+    
+    /* Shadow variables */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+
+  .dark {
+    /* Main colors */
+    --background: 226 25% 10%;
+    --foreground: 220 20% 98%;
+    
+    /* Card colors */
+    --card: 224 20% 15%;
+    --card-foreground: 220 20% 98%;
+    
+    /* Popover colors */
+    --popover: 224 20% 15%;
+    --popover-foreground: 220 20% 98%;
+    
+    /* Primary colors */
+    --primary: 226 88% 60%;
+    --primary-rgb: 77, 115, 227;
+    --primary-foreground: 0 0% 100%;
+    --primary-light: 226 88% 20%;
+    --primary-dark: 226 88% 70%;
+    
+    /* Secondary colors */
+    --secondary: 255 75% 58%;
+    --secondary-foreground: 0 0% 100%;
+    
+    /* Muted colors */
+    --muted: 224 20% 20%;
+    --muted-foreground: 220 15% 65%;
+    
+    /* Accent colors */
+    --accent: 226 88% 25%;
+    --accent-foreground: 226 88% 90%;
+    
+    /* Destructive colors */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    /* Success, warning colors */
+    --success: 142 64% 54%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 60%;
+    --warning-foreground: 0 0% 100%;
+    
+    /* Border and input colors */
+    --border: 224 20% 25%;
+    --input: 224 20% 25%;
+    --ring: 226 88% 60%;
+    
+    /* Shadow variables - darker for dark mode */
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 6px 10px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 15px 25px rgba(0, 0, 0, 0.5);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  /* Improved focus styles */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-primary/50 ring-offset-2 ring-offset-background;
+  }
+  
+  /* Better typography */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-medium tracking-tight;
+  }
+  
+  h1 {
+    @apply text-3xl md:text-4xl;
+  }
+  
+  h2 {
+    @apply text-2xl md:text-3xl;
+  }
+  
+  h3 {
+    @apply text-xl md:text-2xl;
+  }
+  
+  p {
+    @apply leading-relaxed;
+  }
+  
+  /* Improved scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-muted/50 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/30 rounded-full hover:bg-muted-foreground/50 transition-colors;
+  }
+}
+
+@layer components {
+  /* Card with hover effect */
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-md hover:border-muted-foreground/25;
+  }
+  
+  /* Custom badges */
+  .badge-success {
+    @apply bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/50;
+  }
+  
+  .badge-warning {
+    @apply bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400 border-amber-200 dark:border-amber-800/50;
+  }
+  
+  .badge-error {
+    @apply bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400 border-rose-200 dark:border-rose-800/50;
+  }
+  
+  /* Gradient background */
+  .bg-gradient {
+    @apply bg-gradient-to-b from-card to-muted/30 dark:from-card dark:to-background;
+  }
+  
+  /* Subtle hover effect */
+  .subtle-hover {
+    @apply transition-colors hover:bg-muted/50;
+  }
+  
+  /* Glass effect */
+  .glass {
+    @apply bg-white/80 dark:bg-black/50 backdrop-blur-md border border-white/20 dark:border-white/10;
+  }
+}
+
+@layer utilities {
+  /* Improved animations */
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+  
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out forwards;
+  }
+  
+  .animate-slide-down {
+    animation: slideDown 0.3s ease-out forwards;
+  }
+  
+  .animate-slide-in-right {
+    animation: slideInRight 0.3s ease-out forwards;
+  }
+  
+  .animate-scale {
+    animation: scale 0.3s ease-out forwards;
+  }
+  
+  .animate-bounce-subtle {
+    animation: bouncySubtle 2s infinite;
+  }
+  
+  /* Text gradient */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary;
+  }
+}
+
+/* Animation keyframes */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes scale {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes bouncySubtle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+} 

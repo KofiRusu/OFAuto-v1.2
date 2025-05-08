@@ -1,0 +1,4 @@
+// Prisma schema file for SQLite
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "sqlite" url = env("DATABASE_URL") }
+model User { id String @id @default(uuid()) clerkId String @unique email String @unique name String? role String @default("USER") createdAt DateTime @default(now()) updatedAt DateTime @updatedAt clients Client[] platforms Platform[] chatbotPersonas ChatbotPersona[] chatbotFeedback ChatbotMessageFeedback[] }

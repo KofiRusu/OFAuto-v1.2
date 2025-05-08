@@ -1,0 +1,12 @@
+{
+  "logGroupName": "/aws/lambda/ofauto-api-production",
+  "filterName": "ErrorRateFilter",
+  "filterPattern": "{ $.level = \"error\" }",
+  "metricTransformations": [
+    {
+      "metricName": "ErrorCount",
+      "metricNamespace": "OFAuto/API",
+      "metricValue": "1"
+    }
+  ]
+} 

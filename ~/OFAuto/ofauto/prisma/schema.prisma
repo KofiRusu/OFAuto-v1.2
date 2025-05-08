@@ -1,0 +1,481 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User roles for the system
+enum UserRole {
+  USER
+  MANAGER
+  ADMIN
+}
+
+// User model for authentication and management
+model User {
+  id        String   @id @default(uuid())
+  clerkId   String   @unique
+  email     String   @unique
+  name      String?
+  role      UserRole @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  clients         Client[]
+  platforms       Platform[]
+  chatbotPersonas ChatbotPersona[]
+  chatbotFeedback ChatbotMessageFeedback[]
+}
+
+// Clients managed in the system
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?
+  phone     String?
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platforms           Platform[]
+  engagementMetrics   EngagementMetric[]
+  financialMetrics    FinancialMetric[]
+  dashboardMetrics    DashboardMetric[]
+  scheduledTasks      ScheduledTask[]
+  credentials         ClientCredential[]
+  insights            Insight[]
+  scheduledPosts      ScheduledPost[]
+  autoDMTasks         AutoDMTask[]
+  campaignExperiments CampaignExperiment[]
+  persona             ClientPersona?
+  chatbotPersonas     ChatbotPersona[]
+  chatbotFeedback     ChatbotMessageFeedback[]
+  insightLogs         InsightLog[]
+}
+
+// Social media platforms
+model Platform {
+  id                  String    @id @default(uuid())
+  clientId            String
+  userId              String
+  platformType        String    // e.g., "onlyfans", "instagram", "twitter"
+  username            String
+  accessToken         String?
+  refreshToken        String?
+  tokenExpiresAt      DateTime?
+  isActive            Boolean   @default(true)
+  lastFollowerCheckAt DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  // Relations
+  client             Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  engagementMetrics  EngagementMetric[]
+  scheduledTasks     ScheduledTask[]
+  automationTriggers AutomationTrigger[]
+  
+  @@unique([clientId, platformType])
+}
+
+// Track engagement metrics for analytics
+model EngagementMetric {
+  id            String   @id @default(uuid())
+  clientId      String
+  platformId    String
+  date          DateTime
+  followers     Int      @default(0)
+  followersGain Int      @default(0)
+  likes         Int      @default(0)
+  comments      Int      @default(0)
+  shares        Int      @default(0)
+  views         Int      @default(0)
+  messages      Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  platform      Platform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  
+  @@unique([clientId, platformId, date])
+}
+
+// Financial transaction types
+enum TransactionType {
+  SUBSCRIPTION
+  TIP
+  PPV_CONTENT
+  DIRECT_MESSAGE
+  OTHER
+}
+
+// Track financial metrics for analytics
+model FinancialMetric {
+  id              String          @id @default(uuid())
+  clientId        String
+  date            DateTime
+  transactionType TransactionType
+  amount          Decimal         @db.Decimal(10, 2)
+  currency        String          @default("USD")
+  description     String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Relations
+  client          Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  @@index([clientId, date])
+}
+
+// Aggregated metrics for dashboard display
+model DashboardMetric {
+  id                  String   @id @default(uuid())
+  clientId            String
+  date                DateTime
+  period              String   // daily, weekly, monthly
+  totalRevenue        Decimal  @db.Decimal(10, 2)
+  subscriptionRevenue Decimal  @db.Decimal(10, 2)
+  tipRevenue          Decimal  @db.Decimal(10, 2)
+  ppvRevenue          Decimal  @db.Decimal(10, 2)
+  messageRevenue      Decimal  @db.Decimal(10, 2)
+  otherRevenue        Decimal  @db.Decimal(10, 2)
+  totalEngagement     Int
+  newFollowers        Int
+  totalFollowers      Int
+  engagementRate      Decimal  @db.Decimal(5, 2)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  client              Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  @@unique([clientId, date, period])
+}
+
+// Content scheduling and management
+model Content {
+  id          String    @id @default(uuid())
+  clientId    String
+  platformId  String
+  title       String
+  description String?
+  mediaUrl    String?
+  status      String    // draft, scheduled, published
+  publishDate DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([clientId, status])
+  @@index([platformId, status])
+}
+
+// Add this new model
+model SuccessStory {
+  id                String      @id @default(uuid())
+  strategyId        String
+  clientId          String
+  strategyType      String
+  title             String
+  description       String      @db.Text
+  metrics           Json
+  testimonial       String?     @db.Text
+  beforeAfterImages String[]
+  featured          Boolean     @default(false)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([strategyType])
+  @@index([clientId])
+  @@index([featured])
+}
+
+// ExecutionTask model for automation tracking
+model ExecutionTask {
+  id               String      @id @default(uuid())
+  clientId         String
+  platformId       String
+  taskType         String      // POST_CONTENT, SEND_DM, ADJUST_PRICING, SCHEDULE_POST, FETCH_METRICS
+  strategyId       String?
+  recommendationId String?
+  status           String      // PENDING, IN_PROGRESS, COMPLETED, FAILED
+  payload          Json        // Content, media URLs, pricing data, etc.
+  result           Json?       // Success, error, metadata
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  completedAt      DateTime?
+
+  @@index([clientId])
+  @@index([platformId])
+  @@index([status])
+  @@index([taskType])
+  @@index([strategyId])
+}
+
+// Renamed and updated model for Client Credentials
+model ClientCredential {
+  id            String   @id @default(cuid()) // Using cuid for potentially higher collision resistance
+  clientId      String
+  platformType  String   // 'patreon' | 'kofi' | 'fansly' | 'onlyfans'
+  credential    String   // Encrypted API key, token, or serialized session
+  iv            String?  // Initialization vector for encryption (optional if using non-IV modes or storing combined)
+  authTag       String?  // Authentication tag for GCM mode (optional)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relation to the Client model
+  Client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, platformType]) // Ensure only one credential set per client per platform type
+  @@index([clientId])
+}
+
+// ScheduledTask model for task scheduling system
+model ScheduledTask {
+  id               String    @id @default(uuid())
+  clientId         String
+  platformId       String
+  taskType         String    // POST_CONTENT, SEND_DM, ADJUST_PRICING
+  payload          Json      // Includes content, media URLs, recipients, pricing data, etc.
+  scheduledAt      DateTime
+  executionWindow  Int       @default(300) // Time window in seconds to allow execution after scheduledAt
+  status           String    @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, FAILED, CANCELLED
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  executedAt       DateTime?
+  resultLog        Json?
+  errorMessage     String?
+  retryCount       Int       @default(0)
+  maxRetries       Int       @default(3)
+  lastRetryAt      DateTime?
+  
+  // Relations
+  client           Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  platform         Platform  @relation(fields: [platformId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([platformId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([status, scheduledAt]) // For efficient polling
+}
+
+// Model for follower interactions
+model FollowerInteraction {
+  id                  String   @id @default(cuid())
+  platform            String
+  platformAccountId   String
+  followerId          String
+  followerUsername    String
+  messageSentAt       DateTime
+  messageTemplateUsed String
+  createdAt           DateTime @default(now())
+
+  @@index([platformAccountId, followerId])
+  @@index([platform, platformAccountId])
+}
+
+// Model for chatbot personalities
+model ChatbotPersona {
+  id            String   @id @default(cuid())
+  userId        String
+  clientId      String?
+  platformId    String?
+  name          String
+  description   String?
+  toneKeywords  String[] 
+  examples      String[] 
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client        Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  feedback      ChatbotMessageFeedback[]
+
+  @@index([userId])
+  @@index([clientId])
+  @@index([platformId])
+}
+
+// Model for chatbot message feedback
+model ChatbotMessageFeedback {
+  id           String   @id @default(cuid())
+  userId       String
+  personaId    String
+  messageId    String   // Reference to FollowerInteraction or preview message
+  messageText  String   // Store the actual message text for analysis
+  feedback     String   // "positive", "negative", "neutral"
+  comment      String?
+  source       String   // "manual", "automated"
+  toneImpact   Json?    // Store adjustments to tone weights
+  createdAt    DateTime @default(now())
+
+  // Relations
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  persona      ChatbotPersona @relation(fields: [personaId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([personaId])
+  @@index([feedback])
+}
+
+// Model for insights
+model Insight {
+  id            String   @id @default(uuid())
+  clientId      String
+  type          String
+  title         String
+  description   String
+  recommendation String   @db.Text 
+  confidence    Float
+  metadata      Json?    
+  status        String   @default("pending") // 'pending', 'accepted', 'rejected', 'implemented'
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([type])
+  @@index([status])
+}
+
+// Model for scheduled posts across different platforms
+model ScheduledPost {
+  id          String   @id @default(cuid())
+  clientId    String
+  platforms   String[] 
+  content     String   @db.Text
+  mediaUrl    String?
+  scheduledAt DateTime
+  status      String   // 'scheduled', 'posted', 'failed'
+  errorMessage String? // Error message if posting failed
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  postedAt    DateTime?
+  
+  // Relations
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([status])
+  @@index([scheduledAt]) // For efficient polling
+  @@index([clientId, status])
+}
+
+// Model for automated direct message tasks
+model AutoDMTask {
+  id          String   @id @default(cuid())
+  clientId    String
+  platformType String
+  trigger     String   // 'new_follower', 'new_subscriber', etc.
+  message     String   @db.Text
+  isRecurring Boolean  @default(false)
+  status      String   @default("active") // 'active', 'paused', 'completed'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastRunAt   DateTime?
+  
+  // Relations
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([platformType])
+  @@index([trigger])
+  @@index([status])
+  @@index([clientId, platformType])
+}
+
+// Model for A/B testing campaigns
+model CampaignExperiment {
+  id               String    @id @default(cuid())
+  clientId         String
+  name             String
+  description      String?   @db.Text
+  startDate        DateTime  @default(now())
+  endDate          DateTime?
+  status           String    @default("running") // 'running', 'paused', 'completed', 'archived'
+  variants         Json    
+  controlVariantId String?
+  goalMetric       String    // e.g., 'conversion_rate', 'revenue', 'engagement'
+  performanceData  Json?   
+  conclusion       String?   @db.Text
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Relations
+  client           Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([status])
+}
+
+// Model for storing client-specific personalization details
+model ClientPersona {
+  id                String   @id @default(cuid())
+  clientId          String   @unique // One persona per client
+  targetAudience    String?  @db.Text
+  brandVoice        String?  @db.Text
+  preferences       Json?    
+  engagementPatterns Json?    
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+}
+
+// Model for storing insight logs
+model InsightLog {
+  id          String   @id @default(uuid())
+  clientId    String
+  insightType String
+  content     String   @db.Text
+  metadata    Json?
+  importance  Int      @default(1) // 1-5 scale
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  // Relations
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([insightType])
+  @@index([createdAt])
+}
+
+// Model for automation triggers
+model AutomationTrigger {
+  id         String   @id @default(uuid())
+  clientId   String
+  platformId String
+  triggerType String  // "REVENUE_DROP", "FOLLOWER_MILESTONE", "ENGAGEMENT_DIP", etc.
+  conditions Json     // Conditions to trigger automation
+  actions    Json     // Actions to take when triggered
+  isActive   Boolean  @default(true)
+  lastFired  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  // Relations
+  platform   Platform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  
+  @@index([clientId])
+  @@index([isActive])
+} 

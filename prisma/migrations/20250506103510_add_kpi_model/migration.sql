@@ -1,0 +1,20 @@
+-- CreateTable
+CREATE TABLE "KPI" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "targetValue" DOUBLE PRECISION NOT NULL,
+    "currentValue" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "dueDate" TIMESTAMP(3),
+    "status" TEXT NOT NULL DEFAULT 'IN_PROGRESS',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "KPI_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "KPI_userId_idx" ON "KPI"("userId");
+
+-- AddForeignKey
+ALTER TABLE "KPI" ADD CONSTRAINT "KPI_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

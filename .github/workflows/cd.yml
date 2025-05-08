@@ -1,0 +1,424 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches: [ main, production ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      force_apply:
+        description: 'Force apply terraform changes (use with caution)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: ofauto
+  TF_VAR_container_image: ${{ github.repository_owner }}/ofauto:${{ github.sha }}
+  ENVIRONMENT: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/production' && 'production') || 'staging' }}
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    
+    outputs:
+      image-tag: ${{ github.sha }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/ofauto
+          tags: |
+            type=sha,format=long
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+  
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      contents: read
+      id-token: write # For OIDC authentication with AWS
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.4.6
+      
+      - name: Terraform Init
+        working-directory: infra/terraform/environments/${{ env.ENVIRONMENT }}
+        run: terraform init
+      
+      - name: Terraform Validate
+        working-directory: infra/terraform/environments/${{ env.ENVIRONMENT }}
+        run: terraform validate
+      
+      - name: Terraform Plan
+        working-directory: infra/terraform/environments/${{ env.ENVIRONMENT }}
+        id: plan
+        run: |
+          terraform plan \
+            -var="container_image=ghcr.io/${{ env.TF_VAR_container_image }}" \
+            -var="clerk_secret_key=${{ secrets.CLERK_SECRET_KEY }}" \
+            -var="clerk_publishable_key=${{ secrets.CLERK_PUBLISHABLE_KEY }}" \
+            -var="encryption_key=${{ secrets.ENCRYPTION_KEY }}" \
+            -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+            -var="acm_certificate_arn=${{ secrets.ACM_CERTIFICATE_ARN }}" \
+            -var="hosted_zone_id=${{ secrets.HOSTED_ZONE_ID }}" \
+            -out=tfplan
+      
+      - name: Upload Terraform plan
+        uses: actions/upload-artifact@v3
+        with:
+          name: terraform-plan-${{ env.ENVIRONMENT }}
+          path: infra/terraform/environments/${{ env.ENVIRONMENT }}/tfplan
+          retention-days: 1
+  
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: terraform-plan
+    permissions:
+      contents: read
+      id-token: write # For OIDC authentication with AWS
+    
+    # Only run on main branch or when manually triggered with force_apply
+    if: |
+      github.ref == 'refs/heads/main' || 
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.force_apply == 'true')
+    
+    environment:
+      name: ${{ github.event.inputs.environment || 'staging' }}
+      # URL will be set after deployment
+    
+    outputs:
+      fqdn: ${{ steps.terraform-outputs.outputs.fqdn }}
+      deployment_url: ${{ steps.set-url.outputs.deployment_url }}
+      rds_endpoint: ${{ steps.terraform-outputs.outputs.rds_endpoint }}
+      database_url: ${{ steps.database-url.outputs.url }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.4.6
+      
+      - name: Download Terraform plan
+        uses: actions/download-artifact@v3
+        with:
+          name: terraform-plan-${{ env.ENVIRONMENT }}
+          path: infra/terraform/environments/${{ env.ENVIRONMENT }}
+      
+      - name: Terraform Init
+        working-directory: infra/terraform/environments/${{ env.ENVIRONMENT }}
+        run: terraform init
+      
+      - name: Terraform Apply
+        working-directory: infra/terraform/environments/${{ env.ENVIRONMENT }}
+        run: terraform apply -auto-approve tfplan
+      
+      - name: Get deployment outputs
+        id: terraform-outputs
+        working-directory: infra/terraform/environments/${{ env.ENVIRONMENT }}
+        run: |
+          echo "ecs_cluster=$(terraform output -raw ecs_cluster_name)" >> $GITHUB_OUTPUT
+          echo "ecs_service=$(terraform output -raw ecs_service_name)" >> $GITHUB_OUTPUT
+          echo "fqdn=$(terraform output -raw fqdn)" >> $GITHUB_OUTPUT
+          echo "rds_endpoint=$(terraform output -raw rds_endpoint)" >> $GITHUB_OUTPUT
+      
+      # Generate DATABASE_URL for migrations
+      - name: Create Database URL
+        id: database-url
+        run: |
+          # Get database credentials from AWS Secrets Manager
+          DB_SECRETS=$(aws secretsmanager get-secret-value --secret-id "${{ env.ENVIRONMENT }}-db-credentials" --query SecretString --output text)
+          DB_USERNAME=$(echo $DB_SECRETS | jq -r '.username')
+          DB_PASSWORD=$(echo $DB_SECRETS | jq -r '.password')
+          DB_NAME="ofauto"
+          
+          # Build the DATABASE_URL connection string
+          DATABASE_URL="postgresql://${DB_USERNAME}:${DB_PASSWORD}@${{ steps.terraform-outputs.outputs.rds_endpoint }}/${DB_NAME}"
+          echo "url=$DATABASE_URL" >> $GITHUB_OUTPUT
+      
+      - name: Create outputs artifact
+        run: |
+          mkdir -p /tmp/outputs
+          echo "${{ steps.terraform-outputs.outputs.ecs_cluster }}" > /tmp/outputs/ecs_cluster_name
+          echo "${{ steps.terraform-outputs.outputs.ecs_service }}" > /tmp/outputs/ecs_service_name
+          echo "${{ steps.terraform-outputs.outputs.fqdn }}" > /tmp/outputs/fqdn
+          echo "${{ steps.database-url.outputs.url }}" > /tmp/outputs/database_url
+      
+      - name: Upload outputs artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: terraform-outputs-${{ env.ENVIRONMENT }}
+          path: /tmp/outputs
+          retention-days: 1
+      
+      # Set the URL for the environment
+      - name: Set deployment URL
+        id: set-url
+        run: echo "deployment_url=https://${{ steps.terraform-outputs.outputs.fqdn }}" >> $GITHUB_OUTPUT
+  
+  database-migrations:
+    name: Run Database Migrations
+    runs-on: ubuntu-latest
+    needs: terraform-apply
+    permissions:
+      id-token: write # For OIDC authentication with AWS
+    
+    # Only run on main branch or when manually triggered with force_apply
+    if: |
+      github.ref == 'refs/heads/main' || 
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.force_apply == 'true')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Download Terraform outputs
+        uses: actions/download-artifact@v3
+        with:
+          name: terraform-outputs-${{ env.ENVIRONMENT }}
+          path: /tmp
+      
+      - name: Get Database URL
+        id: database-url
+        run: |
+          DATABASE_URL=$(cat /tmp/database_url)
+          echo "database_url=$DATABASE_URL" >> $GITHUB_OUTPUT
+      
+      - name: Run Prisma migrations
+        run: |
+          # Set DATABASE_URL env var from secrets
+          export DATABASE_URL="${{ steps.database-url.outputs.database_url }}"
+          
+          # Generate Prisma client
+          npx prisma generate
+          
+          # Run migrations
+          npx prisma migrate deploy
+          
+          # Wait for migrations to complete
+          sleep 5
+        env:
+          DATABASE_URL: ${{ steps.database-url.outputs.database_url }}
+      
+      - name: Verify migrations
+        run: |
+          # Set DATABASE_URL env var from secrets
+          export DATABASE_URL="${{ steps.database-url.outputs.database_url }}"
+          
+          # Check migration status
+          npx prisma migrate status
+        env:
+          DATABASE_URL: ${{ steps.database-url.outputs.database_url }}
+  
+  deploy-service:
+    name: Deploy ECS Service
+    runs-on: ubuntu-latest
+    needs: [build-and-push, terraform-apply, database-migrations]
+    permissions:
+      id-token: write # For OIDC authentication with AWS
+    
+    # Only run on main branch or when manually triggered with force_apply
+    if: |
+      github.ref == 'refs/heads/main' || 
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.force_apply == 'true')
+    
+    environment:
+      name: ${{ github.event.inputs.environment || 'staging' }}
+      url: ${{ needs.terraform-apply.outputs.deployment_url }}
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Download Terraform outputs
+        uses: actions/download-artifact@v3
+        with:
+          name: terraform-outputs-${{ env.ENVIRONMENT }}
+          path: /tmp
+      
+      - name: Get ECS details
+        id: ecs-details
+        run: |
+          ECS_CLUSTER=$(cat /tmp/ecs_cluster_name)
+          ECS_SERVICE=$(cat /tmp/ecs_service_name)
+          
+          echo "ecs_cluster=$ECS_CLUSTER" >> $GITHUB_OUTPUT
+          echo "ecs_service=$ECS_SERVICE" >> $GITHUB_OUTPUT
+      
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service \
+            --cluster ${{ steps.ecs-details.outputs.ecs_cluster }} \
+            --service ${{ steps.ecs-details.outputs.ecs_service }} \
+            --force-new-deployment
+      
+      - name: Wait for stable service
+        run: |
+          aws ecs wait services-stable \
+            --cluster ${{ steps.ecs-details.outputs.ecs_cluster }} \
+            --services ${{ steps.ecs-details.outputs.ecs_service }}
+  
+  smoke-test:
+    name: Smoke Testing
+    runs-on: ubuntu-latest
+    needs: [deploy-service, terraform-apply]
+    
+    # Only run on main branch or when manually triggered with force_apply
+    if: |
+      github.ref == 'refs/heads/main' || 
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.force_apply == 'true')
+    
+    steps:
+      - name: Download deployment URL
+        uses: actions/download-artifact@v3
+        with:
+          name: terraform-outputs-${{ env.ENVIRONMENT }}
+          path: /tmp
+      
+      - name: Get deployment URL
+        id: deployment-url
+        run: |
+          FQDN=$(cat /tmp/fqdn)
+          echo "url=https://$FQDN" >> $GITHUB_OUTPUT
+      
+      - name: Health check
+        run: |
+          # Wait for DNS to propagate
+          sleep 60
+          
+          # Try health check endpoint
+          curl --fail ${{ steps.deployment-url.outputs.url }}/api/health || exit 1
+          
+          echo "Health check passed"
+      
+      - name: Basic functional check
+        run: |
+          # Check if the site loads
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ steps.deployment-url.outputs.url }})
+          
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "Site is not reachable. HTTP status: $HTTP_STATUS"
+            exit 1
+          fi
+          
+          echo "Site is up and running"
+  
+  notify:
+    name: Notify Deployment Status
+    runs-on: ubuntu-latest
+    needs: [deploy-service, terraform-apply, smoke-test]
+    if: always()
+    
+    steps:
+      - name: Deployment Status
+        id: status
+        run: |
+          if [[ "${{ needs.deploy-service.result }}" == "success" && "${{ needs.terraform-apply.result }}" == "success" && "${{ needs.smoke-test.result }}" == "success" ]]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "message=Deployment to ${{ env.ENVIRONMENT }} completed successfully!" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "message=Deployment to ${{ env.ENVIRONMENT }} failed." >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create Status Issue Comment
+        if: github.event_name == 'pull_request'
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ## Deployment Status: ${{ steps.status.outputs.status }}
+            
+            ${{ steps.status.outputs.message }}
+            
+            Environment: ${{ env.ENVIRONMENT }}
+            Image: ghcr.io/${{ env.TF_VAR_container_image }}
+            ${{ steps.status.outputs.status == 'success' && format('URL: https://{0}', needs.terraform-apply.outputs.fqdn) || '' }}
+      
+      - name: Notify on failure
+        if: steps.status.outputs.status == 'failure'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,workflow
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }} 

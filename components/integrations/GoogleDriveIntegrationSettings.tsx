@@ -1,0 +1,32 @@
+\'use client\';\n\nimport React, { useState, useEffect } from \'react\';\nimport { Button } from \"@/components/ui/button\";\nimport { Input } from \"@/components/ui/input\";\nimport { Label } from \"@/components/ui/label\";\nimport { Switch } from \"@/components/ui/switch\";\nimport { Badge } from \"@/components/ui/badge\";\nimport { useToast } from \"@/components/ui/use-toast\";\nimport { ExternalLink, Link as LinkIcon } from \'lucide-react\';\n\ninterface GoogleDriveIntegrationSettingsProps {\n  platformId: string; // Identifier for the specific account/platform being configured\n  // Initial state passed from parent/server\n  initialIsEnabled?: boolean;\n  initialFolderId?: string;\n  initialStatus?: \'connected\' | \'disconnected\';\n  lastSyncTime?: string;\n}\n\nexport function GoogleDriveIntegrationSettings({\n  platformId,\n  initialIsEnabled = false,\n  initialFolderId = \'\',\n  initialStatus = \'disconnected\',\n  lastSyncTime\n}: GoogleDriveIntegrationSettingsProps) {\n  const [status, setStatus] = useState(initialStatus);\n  const [isEnabled, setIsEnabled] = useState(initialIsEnabled);\n  const [folderId, setFolderId] = useState(initialFolderId);\n  const [isLoading, setIsLoading] = useState(false);\n  const { toast } = useToast();\n\n  // Update status based on initial props or fetched data\n  useEffect(() => {\n      // TODO: Fetch the actual connection status and settings when component mounts\n      // For now, rely on initial props
+       setStatus(initialStatus);
+       setIsEnabled(initialIsEnabled);
+       setFolderId(initialFolderId);
+  }, [initialStatus, initialIsEnabled, initialFolderId]);
+
+  // Handle OAuth connection initiation\n  const handleConnectGoogleDrive = async () => {\n    setIsLoading(true);\n    try {\n      // Fetch the auth URL from our backend\n      const response = await fetch(`/api/integrations/google/auth/url?platformId=${platformId}`);\n      if (!response.ok) throw new Error(\'Failed to get Google Auth URL\');\n      const { authUrl } = await response.json();\n      // Redirect the user to Google's OAuth consent screen\n      window.location.href = authUrl;\n    } catch (error) {\n      toast({ title: \"Error\", description: \"Could not initiate Google Drive connection.\", variant: \"destructive\" });\n      console.error(\'Google connect error:\', error);\n      setIsLoading(false);\n    }\n    // Loading state remains true until redirected or error
+  };\n
+  // Handle saving settings (folder ID, enabled state)\n  const handleSaveChanges = async () => {\n      if (isEnabled && !folderId) {\n          toast({ title: \"Folder ID Required\", description: \"Please enter a Google Drive folder ID to enable sync.\", variant: \"destructive\" });\n          return;
+      }\n      setIsLoading(true);\n      try {\n          const response = await fetch(\'/api/integrations/google/settings\', {\n              method: \'POST\',\n              headers: { \'Content-Type\': \'application/json\' },\n              body: JSON.stringify({ platformId, folderId, isEnabled }),\n          });\n          const result = await response.json();\n          if (response.ok && result.success) {\n              toast({ title: \"Settings Saved\", description: \"Google Drive settings updated.\" });\n          } else {\n              throw new Error(result.error || \'Failed to save settings\');\n          }\n      } catch (error: any) {\n          toast({ title: \"Error Saving Settings\", description: error.message, variant: \"destructive\" });\n      } finally {\n          setIsLoading(false);
+      }\n  };
+
+  // Handle enabling/disabling the sync toggle\n  const handleToggleChange = (checked: boolean) => {\n    setIsEnabled(checked);\n    // Automatically save changes when toggling\n    // Or require explicit save via button?
+    // For now, require explicit save:
+    // handleSaveChanges(); // Uncomment to save on toggle
+  };
+
+  const getStatusBadge = () => {\n    // TODO: Get real-time status (e.g., check token validity)
+    return status === 'connected' ? \n      <Badge variant=\"success\">Connected</Badge> : \n      <Badge variant=\"destructive\">Disconnected</Badge>;\n  };
+
+  return (\n    <div className=\"space-y-6 p-4 border rounded-lg\">\n      <div className=\"flex justify-between items-center\">\n        <h3 className=\"text-lg font-semibold flex items-center\"><LinkIcon className=\"mr-2 h-5 w-5\" />Google Drive Integration</h3>\n        {getStatusBadge()}\n      </div>\n
+      {status === 'disconnected' && (\n        <Button onClick={handleConnectGoogleDrive} disabled={isLoading}>\n          {isLoading ? \'Redirecting...\' : \'Connect Google Drive\'}\n        </Button>\n      )}
+
+      {status === 'connected' && (\n        <>\n          <div className=\"space-y-2\">\n            <Label htmlFor=\"gdrive-folder-id\">Sync Folder ID</Label>\n            <Input\n              id=\"gdrive-folder-id\"\n              value={folderId}\n              onChange={(e) => setFolderId(e.target.value)}\n              placeholder=\"Enter Google Drive Folder ID\"\n              disabled={isLoading || !isEnabled}\n            />\n            <p className=\"text-xs text-muted-foreground\">\n              The ID is the last part of the folder's URL in Google Drive.\n            </p>\n          </div>\n
+          <div className=\"flex items-center space-x-2 pt-2\">\n            <Switch \n              id=\"gdrive-enable-sync\" \n              checked={isEnabled}\n              onCheckedChange={handleToggleChange}\n              disabled={isLoading}\n            />\n            <Label htmlFor=\"gdrive-enable-sync\">Enable Sync for this Account</Label>\n          </div>\n
+          {lastSyncTime && isEnabled && (\n            <p className=\"text-sm text-muted-foreground\">Last synced: {lastSyncTime}</p>\n          )}
+          
+          <div className=\"flex space-x-2 pt-4\">\n             <Button onClick={handleSaveChanges} disabled={isLoading}>\n                {isLoading ? \'Saving...\' : \'Save Settings\'}\n            </Button>
+             {/* Button to view files could open a modal or navigate */}\n             {isEnabled && folderId && (\n                <Button variant=\"outline\" disabled={isLoading}>\n                    View Synced Files\n                </Button>\n             )}
+          </div>
+        </>\n      )}
+    </div>\n  );\n} 

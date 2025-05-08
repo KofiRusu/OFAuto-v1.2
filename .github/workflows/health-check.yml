@@ -1,0 +1,89 @@
+name: Daily Health Check
+
+on:
+  schedule:
+    # Run daily at midnight UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    # Allow manual triggering
+
+jobs:
+  health_check:
+    name: API Health Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: API Health Check
+        id: health_check
+        run: |
+          echo "Running API health check..."
+          RESPONSE=$(curl -s -o response.json -w "%{http_code}" ${{ secrets.HEALTH_CHECK_URL || 'https://ofauto.vercel.app/api/health' }})
+          if [[ "$RESPONSE" == "200" ]]; then
+            echo "✅ Health check passed with status code 200"
+            echo "response=$(cat response.json)" >> $GITHUB_OUTPUT
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Health check failed with status code $RESPONSE"
+            echo "response=$(cat response.json)" >> $GITHUB_OUTPUT
+            echo "status=failure" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Run Playwright smoke tests
+        if: ${{ steps.health_check.outputs.status == 'success' && github.ref == 'refs/heads/main' }}
+        run: |
+          npx playwright install --with-deps
+          npm run test:smoke
+      
+      - name: Update status badge
+        if: always()
+        run: |
+          echo "TIMESTAMP=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
+          if [[ "${{ steps.health_check.outputs.status }}" == "success" ]]; then
+            echo "STATUS=passing" >> $GITHUB_ENV
+            echo "COLOR=green" >> $GITHUB_ENV
+          else
+            echo "STATUS=failing" >> $GITHUB_ENV
+            echo "COLOR=red" >> $GITHUB_ENV
+          fi
+      
+      - name: Create/Update status badge file
+        if: always()
+        run: |
+          cat > health-status.json << EOF
+          {
+            "schemaVersion": 1,
+            "label": "health",
+            "message": "${{ env.STATUS }}",
+            "color": "${{ env.COLOR }}",
+            "lastChecked": "${{ env.TIMESTAMP }}"
+          }
+          EOF
+      
+      - name: Upload status badge as artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: health-status
+          path: health-status.json
+      
+      - name: Notify on failure
+        if: failure() || steps.health_check.outputs.status == 'failure'
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_COLOR: danger
+          SLACK_TITLE: 'Health Check Failed'
+          SLACK_MESSAGE: 'The daily health check has failed. Please investigate.'
+          SLACK_FOOTER: 'OFAuto Monitoring' 

@@ -2,6 +2,10 @@
   "name": "ofauto",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev -p 3015",
     "build": "next build --no-lint",
@@ -30,7 +34,11 @@
     "lint:fix": "eslint --fix .",
     "format": "prettier --write .",
     "analyze": "ANALYZE=true next build",
-    "load-test": "k6 run load-tests/api-load-test.js"
+    "load-test": "k6 run load-tests/api-load-test.js",
+    "dev:backend": "npm run dev --workspace=apps/backend",
+    "dev:frontend": "npm run dev --workspace=apps/frontend-v0",
+    "build:backend": "npm run build --workspace=apps/backend",
+    "build:frontend": "npm run build --workspace=apps/frontend-v0"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.802.0",

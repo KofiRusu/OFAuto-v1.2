@@ -14,7 +14,11 @@ import {
   Clock,
   Eye,
   Share,
-  User
+  User,
+  MoreVertical,
+  DollarSign,
+  TrendingUp,
+  Calendar
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -39,8 +43,6 @@ import { TemplatePreview } from '@/components/dashboard/campaigns/TemplatePrevie
 import { useCampaigns, Campaign } from '@/hooks/useCampaigns'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  BarChart3,
-  Calendar,
   Edit,
   ExternalLink,
   Plus,
@@ -53,15 +55,36 @@ import { formatCurrency, formatNumber, formatDate } from '@/lib/utils'
 import Link from 'next/link'
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts'
 import CampaignModal from '@/components/campaigns/campaign-modal'
+import { Metadata } from 'next'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/src/components/ui/dropdown-menu'
+
+export const metadata: Metadata = {
+  title: 'Campaign Details - OFAuto Dashboard',
+  description: 'View and manage campaign details',
+}
 
 // Mock campaign data
 const MOCK_CAMPAIGN = {
   id: '1',
-  name: 'New Subscriber Welcome',
-  description: 'Automatically send a welcome message to new subscribers',
+  name: 'Summer Promotion 2024',
   status: 'active',
-  triggerType: 'new_subscriber',
-  platform: 'onlyfans',
+  startDate: '2024-06-01',
+  endDate: '2024-08-31',
+  budget: 5000,
+  spent: 2345,
+  reach: 45678,
+  conversions: 234,
+  conversionRate: 3.2,
+  roi: 156,
+  platforms: ['OnlyFans', 'Fansly', 'Instagram'],
+  description: 'Summer promotional campaign featuring exclusive beach content and special subscriber discounts.',
   createdAt: new Date(Date.now() - 86400000 * 30).toISOString(),
   updatedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
   templateData: {
@@ -327,502 +350,244 @@ export default function CampaignDetailPage() {
     )
   }
 
+  const progress = (campaignData.spent / campaignData.budget) * 100
+
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              asChild 
-              className="h-8 w-8"
-            >
-              <Link href="/dashboard/campaigns">
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard/campaigns">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-4 w-4" />
             </Button>
-            <h1 className="text-2xl font-bold">{campaignData.name}</h1>
-            {getStatusBadge(campaignData.status)}
-            {campaignData.abTest && (
-              <Badge variant="outline">A/B Test</Badge>
-            )}
-            {campaignData.abTestVariant && (
-              <Badge variant="outline">Variant: {campaignData.abTestVariant}</Badge>
-            )}
+          </Link>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">{campaignData.name}</h1>
+            <div className="flex items-center gap-2 mt-1">
+              {getStatusBadge(campaignData.status)}
+              <span className="text-sm text-muted-foreground">
+                {formatDate(campaignData.startDate)} - {formatDate(campaignData.endDate)}
+              </span>
+            </div>
           </div>
-          <p className="text-muted-foreground">
-            {campaignData.description || 'No description provided'}
-          </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex gap-2">
           {renderStatusButtons()}
-          
-          <Button 
-            variant="outline" 
-            className="gap-2" 
-            onClick={handleEdit}
-          >
-            <Edit className="h-4 w-4" />
-            Edit
+          <Button>
+            <Edit className="mr-2 h-4 w-4" />
+            Edit Campaign
           </Button>
-          
-          <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-            <AlertDialogTrigger asChild>
-              <Button 
-                variant="destructive" 
-                className="gap-2"
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <MoreVertical className="h-4 w-4" />
               </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Are you sure you want to delete this campaign? This action cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction 
-                  onClick={handleDelete} 
-                  className="bg-destructive text-destructive-foreground"
-                >
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>Duplicate</DropdownMenuItem>
+              <DropdownMenuItem>Export Data</DropdownMenuItem>
+              <DropdownMenuItem className="text-destructive">
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Campaign
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      {/* Campaign Info */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Overview Cards */}
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Budget
-            </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Budget Spent</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(campaignData.budget)}
-            </div>
+            <div className="text-2xl font-bold">${campaignData.spent.toLocaleString()}</div>
+            <Progress value={progress} className="mt-2" />
             <p className="text-xs text-muted-foreground mt-1">
-              {formatCurrency(campaignData.metrics?.cost || 0)} spent
+              {progress.toFixed(1)}% of ${campaignData.budget.toLocaleString()} budget
             </p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Timeline
-            </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Reach</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-md font-medium">
-              {formatDate(campaignData.startDate)} - {formatDate(campaignData.endDate)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1 flex items-center">
-              <Calendar className="h-3 w-3 mr-1" />
-              {new Date(campaignData.endDate) > new Date() 
-                ? `${Math.ceil((new Date(campaignData.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days remaining` 
-                : 'Campaign ended'}
+            <div className="text-2xl font-bold">{campaignData.reach.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">
+              +20.1% from last week
             </p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Performance
-            </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Conversions</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col">
-              <div className="text-lg font-bold">
-                {campaignData.metrics?.ctr?.toFixed(2) || '0.00'}% CTR
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">
-                {formatNumber(campaignData.metrics?.clicks || 0)} clicks / {formatNumber(campaignData.metrics?.impressions || 0)} impressions
-              </div>
-            </div>
+            <div className="text-2xl font-bold">{campaignData.conversions}</div>
+            <p className="text-xs text-muted-foreground">
+              {campaignData.conversionRate}% conversion rate
+            </p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              ROI
-            </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">ROI</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {campaignData.metrics?.roi?.toFixed(2) || '0.00'}%
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {formatNumber(campaignData.metrics?.conversions || 0)} conversions
+            <div className="text-2xl font-bold">{campaignData.roi}%</div>
+            <p className="text-xs text-muted-foreground">
+              Return on investment
             </p>
           </CardContent>
         </Card>
       </div>
-
-      {/* Metrics and Analysis */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Campaign Metrics</CardTitle>
-          <CardDescription>
-            Performance data for the current campaign
-          </CardDescription>
-          <Tabs defaultValue={activeMetricTab} value={activeMetricTab} onValueChange={setActiveMetricTab}>
-            <TabsList>
-              <TabsTrigger value="performance">Performance</TabsTrigger>
-              <TabsTrigger value="abtest" disabled={abTestVariants.length <= 1}>A/B Testing</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </CardHeader>
-        <CardContent>
-          <TabsContent value="performance" className="space-y-4">
-            {/* Metrics Chart */}
-            <div className="h-80">
-              {metricsHistory.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart
-                    data={metricsHistory}
-                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="impressions" stroke="#8884d8" />
-                    <Line type="monotone" dataKey="clicks" stroke="#82ca9d" />
-                    <Line type="monotone" dataKey="conversions" stroke="#ffc658" />
-                    <Line type="monotone" dataKey="ctr" stroke="#ff8042" />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                  <BarChart3 className="h-10 w-10 mb-2" />
-                  <p>No historical data available for this campaign</p>
-                </div>
-              )}
-            </div>
-
-            {/* Detailed Metrics */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-muted-foreground mb-1">
-                    Impressions
-                  </div>
-                  <div className="text-xl font-bold">
-                    {formatNumber(campaignData.metrics?.impressions || 0)}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-muted-foreground mb-1">
-                    Clicks
-                  </div>
-                  <div className="text-xl font-bold">
-                    {formatNumber(campaignData.metrics?.clicks || 0)}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-muted-foreground mb-1">
-                    Conversions
-                  </div>
-                  <div className="text-xl font-bold">
-                    {formatNumber(campaignData.metrics?.conversions || 0)}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-muted-foreground mb-1">
-                    Conversion Rate
-                  </div>
-                  <div className="text-xl font-bold">
-                    {campaignData.metrics?.conversionRate?.toFixed(2) || '0.00'}%
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-muted-foreground mb-1">
-                    Revenue
-                  </div>
-                  <div className="text-xl font-bold">
-                    {formatCurrency(campaignData.metrics?.revenue || 0)}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-muted-foreground mb-1">
-                    Cost
-                  </div>
-                  <div className="text-xl font-bold">
-                    {formatCurrency(campaignData.metrics?.cost || 0)}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-muted-foreground mb-1">
-                    ROI
-                  </div>
-                  <div className="text-xl font-bold">
-                    {campaignData.metrics?.roi?.toFixed(2) || '0.00'}%
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-muted-foreground mb-1">
-                    CTR
-                  </div>
-                  <div className="text-xl font-bold">
-                    {campaignData.metrics?.ctr?.toFixed(2) || '0.00'}%
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="abtest">
-            {abTestVariants.length <= 1 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
-                <div className="mb-4">No A/B test variants available</div>
-                {!campaignData.abTestParentId && (
-                  <Button onClick={() => setIsCreateVariantModalOpen(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create A/B Test Variant
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium">A/B Test Comparison</h3>
-                  {!campaignData.abTestParentId && (
-                    <Button onClick={() => setIsCreateVariantModalOpen(true)}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Variant
-                    </Button>
-                  )}
-                </div>
-                
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left p-2">Variant</th>
-                        <th className="text-right p-2">Impressions</th>
-                        <th className="text-right p-2">Clicks</th>
-                        <th className="text-right p-2">CTR</th>
-                        <th className="text-right p-2">Conversions</th>
-                        <th className="text-right p-2">Conv. Rate</th>
-                        <th className="text-right p-2">Revenue</th>
-                        <th className="text-right p-2">ROI</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[parentCampaign, ...abTestVariants.filter(c => c.id !== parentCampaign?.id)].map((variant) => {
-                        const isBaseline = variant?.id === parentCampaign?.id;
-                        const compareWith = isBaseline ? undefined : parentCampaign;
-                        
-                        return (
-                          <tr key={variant?.id} className="border-b hover:bg-muted/50">
-                            <td className="p-2">
-                              <div className="font-medium">
-                                {isBaseline ? 'Baseline' : variant?.abTestVariant || 'Variant'}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {variant?.name}
-                              </div>
-                            </td>
-                            <td className="text-right p-2">
-                              <div>{formatNumber(variant?.metrics?.impressions || 0)}</div>
-                              {!isBaseline && compareWith && (
-                                <ComparisonBadge 
-                                  comparison={compareMetrics('impressions', compareWith, variant!)}
-                                />
-                              )}
-                            </td>
-                            <td className="text-right p-2">
-                              <div>{formatNumber(variant?.metrics?.clicks || 0)}</div>
-                              {!isBaseline && compareWith && (
-                                <ComparisonBadge 
-                                  comparison={compareMetrics('clicks', compareWith, variant!)}
-                                />
-                              )}
-                            </td>
-                            <td className="text-right p-2">
-                              <div>{variant?.metrics?.ctr?.toFixed(2) || '0.00'}%</div>
-                              {!isBaseline && compareWith && (
-                                <ComparisonBadge 
-                                  comparison={compareMetrics('ctr', compareWith, variant!)}
-                                />
-                              )}
-                            </td>
-                            <td className="text-right p-2">
-                              <div>{formatNumber(variant?.metrics?.conversions || 0)}</div>
-                              {!isBaseline && compareWith && (
-                                <ComparisonBadge 
-                                  comparison={compareMetrics('conversions', compareWith, variant!)}
-                                />
-                              )}
-                            </td>
-                            <td className="text-right p-2">
-                              <div>{variant?.metrics?.conversionRate?.toFixed(2) || '0.00'}%</div>
-                              {!isBaseline && compareWith && (
-                                <ComparisonBadge 
-                                  comparison={compareMetrics('conversionRate', compareWith, variant!)}
-                                />
-                              )}
-                            </td>
-                            <td className="text-right p-2">
-                              <div>{formatCurrency(variant?.metrics?.revenue || 0)}</div>
-                              {!isBaseline && compareWith && (
-                                <ComparisonBadge 
-                                  comparison={compareMetrics('revenue', compareWith, variant!)}
-                                />
-                              )}
-                            </td>
-                            <td className="text-right p-2">
-                              <div>{variant?.metrics?.roi?.toFixed(2) || '0.00'}%</div>
-                              {!isBaseline && compareWith && (
-                                <ComparisonBadge 
-                                  comparison={compareMetrics('roi', compareWith, variant!)}
-                                />
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                
-                <div className="bg-muted p-4 rounded-md">
-                  <h4 className="font-medium mb-2">A/B Test Insights</h4>
-                  <p className="text-sm text-muted-foreground">
-                    {abTestVariants.length > 1 ? (
-                      abTestVariants.some(v => 
-                        v.id !== parentCampaign?.id && 
-                        v.metrics?.ctr && 
-                        parentCampaign?.metrics?.ctr && 
-                        v.metrics.ctr > parentCampaign.metrics.ctr * 1.1
-                      ) ? (
-                        "One or more variants are outperforming the baseline. Consider allocating more budget to the best performing variant."
-                      ) : (
-                        "Variants are performing similarly to the baseline. Continue testing to gather more data."
-                      )
-                    ) : (
-                      "Not enough variants to provide meaningful insights."
-                    )}
-                  </p>
-                </div>
-              </div>
-            )}
-          </TabsContent>
-        </CardContent>
-      </Card>
 
       {/* Campaign Details */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="md:col-span-1">
-          <CardHeader>
-            <CardTitle>Campaign Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="text-sm font-medium text-muted-foreground">Platform</div>
-              <div className="text-sm capitalize">{campaignData.platform}</div>
-              
-              <div className="text-sm font-medium text-muted-foreground">Status</div>
-              <div className="text-sm">{getStatusBadge(campaignData.status)}</div>
-              
-              <div className="text-sm font-medium text-muted-foreground">Start Date</div>
-              <div className="text-sm">{formatDate(campaignData.startDate)}</div>
-              
-              <div className="text-sm font-medium text-muted-foreground">End Date</div>
-              <div className="text-sm">{formatDate(campaignData.endDate)}</div>
-              
-              <div className="text-sm font-medium text-muted-foreground">Budget</div>
-              <div className="text-sm">{formatCurrency(campaignData.budget)}</div>
-              
-              <div className="text-sm font-medium text-muted-foreground">Created At</div>
-              <div className="text-sm">{formatDate(campaignData.createdAt)}</div>
-              
-              <div className="text-sm font-medium text-muted-foreground">Last Updated</div>
-              <div className="text-sm">{formatDate(campaignData.updatedAt)}</div>
-              
-              <div className="text-sm font-medium text-muted-foreground">A/B Test</div>
-              <div className="text-sm">{campaignData.abTest || campaignData.abTestVariant ? 'Yes' : 'No'}</div>
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button variant="outline" className="w-full" asChild>
-              <Link href={`/dashboard/clients/${campaignData.clientId}`}>
-                <Users className="h-4 w-4 mr-2" />
-                View Client
-              </Link>
-            </Button>
-          </CardFooter>
-        </Card>
-        
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Campaign Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {/* Placeholder for activity feed */}
-              <div className="flex items-start gap-4 pb-4 border-b">
-                <div className="rounded-full bg-primary/10 p-2">
-                  <Play className="h-4 w-4 text-primary" />
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="performance">Performance</TabsTrigger>
+          <TabsTrigger value="content">Content</TabsTrigger>
+          <TabsTrigger value="audience">Audience</TabsTrigger>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Campaign Description</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">{campaignData.description}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Active Platforms</CardTitle>
+              <CardDescription>
+                This campaign is running on the following platforms
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {campaignData.platforms.map((platform) => (
+                  <Badge key={platform} variant="secondary">
+                    {platform}
+                  </Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Activity</CardTitle>
+              <CardDescription>
+                Latest updates and actions for this campaign
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="h-2 w-2 rounded-full bg-primary" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Campaign launched</p>
+                    <p className="text-xs text-muted-foreground">June 1, 2024 at 9:00 AM</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium">Campaign was activated</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatDate(campaignData.updatedAt)}
-                  </p>
+                <div className="flex items-center gap-4">
+                  <div className="h-2 w-2 rounded-full bg-primary" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Reached 25% of budget</p>
+                    <p className="text-xs text-muted-foreground">June 15, 2024 at 2:30 PM</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="h-2 w-2 rounded-full bg-primary" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">100 new conversions</p>
+                    <p className="text-xs text-muted-foreground">June 20, 2024 at 11:45 AM</p>
+                  </div>
                 </div>
               </div>
-              <div className="flex items-start gap-4 pb-4 border-b">
-                <div className="rounded-full bg-primary/10 p-2">
-                  <Settings className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Campaign settings updated</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatDate(campaignData.updatedAt)}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-4">
-                <div className="rounded-full bg-primary/10 p-2">
-                  <Clock className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Campaign created</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatDate(campaignData.createdAt)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="performance">
+          <Card>
+            <CardHeader>
+              <CardTitle>Performance Metrics</CardTitle>
+              <CardDescription>
+                Detailed performance analytics will be displayed here
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">
+                Charts and graphs showing campaign performance over time
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="content">
+          <Card>
+            <CardHeader>
+              <CardTitle>Campaign Content</CardTitle>
+              <CardDescription>
+                Posts and media associated with this campaign
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">
+                Content items will be displayed here
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="audience">
+          <Card>
+            <CardHeader>
+              <CardTitle>Target Audience</CardTitle>
+              <CardDescription>
+                Audience demographics and targeting settings
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">
+                Audience insights will be displayed here
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="settings">
+          <Card>
+            <CardHeader>
+              <CardTitle>Campaign Settings</CardTitle>
+              <CardDescription>
+                Configure campaign parameters and automation rules
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">
+                Campaign configuration options will be displayed here
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Edit Modal */}
       <CampaignModal

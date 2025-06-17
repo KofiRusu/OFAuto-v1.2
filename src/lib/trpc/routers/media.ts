@@ -3,6 +3,8 @@ import { z } from "zod";
 import { router, protectedProcedure, managerProcedure } from "../server";
 import { applyImageWatermark, uploadToS3, WatermarkOptions } from "@/services/watermarkService";
 import { v4 as uuidv4 } from "uuid";
+import { mediaProcessingService } from "@/lib/services/mediaProcessingService";
+import { addMediaProcessingJob } from "@/lib/queue";
 
 // File upload schema
 const uploadMediaSchema = z.object({
@@ -29,7 +31,7 @@ const applyWatermarkSchema = z.object({
 const getMediaAssetsSchema = z.object({
   limit: z.number().min(1).max(100).default(20),
   cursor: z.string().optional(),
-  filterByOwnerId: z.string().optional(),
+  filterByUserId: z.string().optional(),
 });
 
 // Schema for retrieving watermark profiles
@@ -46,7 +48,244 @@ const createWatermarkProfileSchema = z.object({
   opacity: z.number().min(0).max(1).default(0.5),
 });
 
+// New schemas for chunked upload
+const startUploadSchema = z.object({
+  filename: z.string(),
+  fileSize: z.number().positive(),
+  mimeType: z.string(),
+});
+
+const uploadChunkSchema = z.object({
+  mediaId: z.string(),
+  chunkIndex: z.number().int().min(0),
+  chunkData: z.string(), // Base64 encoded chunk
+});
+
+const finishUploadSchema = z.object({
+  mediaId: z.string(),
+});
+
+const getMediaStatusSchema = z.object({
+  mediaId: z.string(),
+});
+
+const reprocessMediaSchema = z.object({
+  mediaId: z.string(),
+});
+
 export const mediaRouter = router({
+  /**
+   * Start a chunked upload
+   */
+  startUpload: protectedProcedure
+    .input(startUploadSchema)
+    .mutation(async ({ ctx, input }) => {
+      const { filename, fileSize, mimeType } = input;
+      const { userId } = ctx;
+
+      // Determine media type from mime type
+      let mediaType = 'image';
+      if (mimeType.startsWith('video/')) {
+        mediaType = 'video';
+      } else if (mimeType.startsWith('audio/')) {
+        mediaType = 'audio';
+      }
+
+      // Create media asset record
+      const mediaAsset = await ctx.prisma.mediaAsset.create({
+        data: {
+          userId,
+          filename,
+          fileSize,
+          mimeType,
+          type: mediaType,
+          status: 'PENDING',
+          url: '', // Will be updated after processing
+        },
+      });
+
+      return {
+        mediaId: mediaAsset.id,
+        chunkSize: parseInt(process.env.CHUNK_SIZE || '1048576'),
+      };
+    }),
+
+  /**
+   * Upload a chunk
+   */
+  uploadChunk: protectedProcedure
+    .input(uploadChunkSchema)
+    .mutation(async ({ ctx, input }) => {
+      const { mediaId, chunkIndex, chunkData } = input;
+      const { userId } = ctx;
+
+      // Verify media ownership
+      const media = await ctx.prisma.mediaAsset.findUnique({
+        where: { id: mediaId },
+      });
+
+      if (!media || media.userId !== userId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Media not found or access denied',
+        });
+      }
+
+      // Convert base64 to buffer
+      const buffer = Buffer.from(chunkData, 'base64');
+
+      // Upload chunk
+      const chunk = await mediaProcessingService.uploadChunk({
+        mediaId,
+        chunkIndex,
+        buffer,
+      });
+
+      // Get upload progress
+      const progress = await mediaProcessingService.getUploadProgress(mediaId);
+
+      return {
+        chunkId: chunk.id,
+        progress,
+      };
+    }),
+
+  /**
+   * Finish upload and start processing
+   */
+  finishUpload: protectedProcedure
+    .input(finishUploadSchema)
+    .mutation(async ({ ctx, input }) => {
+      const { mediaId } = input;
+      const { userId } = ctx;
+
+      // Verify media ownership
+      const media = await ctx.prisma.mediaAsset.findUnique({
+        where: { id: mediaId },
+      });
+
+      if (!media || media.userId !== userId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Media not found or access denied',
+        });
+      }
+
+      // Assemble chunks
+      const filePath = await mediaProcessingService.assembleChunks(mediaId);
+
+      // Add to processing queue
+      const taskId = uuidv4();
+      await ctx.prisma.mediaAsset.update({
+        where: { id: mediaId },
+        data: { taskId },
+      });
+
+      await addMediaProcessingJob({
+        mediaId,
+        taskId,
+        type: 'process',
+      });
+
+      return {
+        mediaId,
+        taskId,
+        status: 'PROCESSING',
+      };
+    }),
+
+  /**
+   * Get media processing status
+   */
+  getMediaStatus: protectedProcedure
+    .input(getMediaStatusSchema)
+    .query(async ({ ctx, input }) => {
+      const { mediaId } = input;
+      const { userId } = ctx;
+
+      const media = await ctx.prisma.mediaAsset.findUnique({
+        where: { id: mediaId },
+        include: {
+          chunks: true,
+        },
+      });
+
+      if (!media) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Media not found',
+        });
+      }
+
+      // Check permissions
+      if (media.userId !== userId && ctx.user?.role !== 'ADMIN' && ctx.user?.role !== 'MANAGER') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Access denied',
+        });
+      }
+
+      // Get upload progress if still uploading
+      let uploadProgress = null;
+      if (media.status === 'PENDING' && media.chunks.length > 0) {
+        uploadProgress = await mediaProcessingService.getUploadProgress(mediaId);
+      }
+
+      return {
+        id: media.id,
+        status: media.status,
+        url: media.url,
+        metadata: media.metadata,
+        processedAt: media.processedAt,
+        processingTimeMs: media.processingTimeMs,
+        uploadProgress,
+      };
+    }),
+
+  /**
+   * Reprocess media (Manager only)
+   */
+  reprocessMedia: managerProcedure
+    .input(reprocessMediaSchema)
+    .mutation(async ({ ctx, input }) => {
+      const { mediaId } = input;
+
+      const media = await ctx.prisma.mediaAsset.findUnique({
+        where: { id: mediaId },
+      });
+
+      if (!media) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Media not found',
+        });
+      }
+
+      // Reset status and add to queue
+      const taskId = uuidv4();
+      await ctx.prisma.mediaAsset.update({
+        where: { id: mediaId },
+        data: {
+          status: 'PROCESSING',
+          taskId,
+          processedAt: null,
+          processingTimeMs: null,
+        },
+      });
+
+      await addMediaProcessingJob({
+        mediaId,
+        taskId,
+        type: 'process',
+      });
+
+      return {
+        mediaId,
+        taskId,
+        status: 'PROCESSING',
+      };
+    }),
+
   /**
    * Upload a media asset
    */
@@ -71,7 +310,7 @@ export const mediaRouter = router({
         const mediaAsset = await ctx.prisma.mediaAsset.create({
           data: {
             url,
-            ownerId: userId,
+            userId,
           },
         });
 
@@ -124,7 +363,7 @@ export const mediaRouter = router({
 
         // Check permissions - only owner or admin can apply watermark
         if (
-          mediaAsset.ownerId !== userId &&
+          mediaAsset.userId !== userId &&
           watermarkProfile.ownerId !== userId &&
           ctx.user?.role !== "ADMIN"
         ) {
@@ -214,7 +453,7 @@ export const mediaRouter = router({
       }
 
       // For non-admin users, only allow if they own the media
-      if (mediaAsset.ownerId !== userId && ctx.user?.role !== "ADMIN") {
+      if (mediaAsset.userId !== userId && ctx.user?.role !== "ADMIN") {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "You don't have permission to access this media",
@@ -257,17 +496,17 @@ export const mediaRouter = router({
   getMediaAssets: protectedProcedure
     .input(getMediaAssetsSchema)
     .query(async ({ ctx, input }) => {
-      const { limit, cursor, filterByOwnerId } = input;
+      const { limit, cursor, filterByUserId } = input;
       const { userId, user } = ctx;
 
       // For regular users, only show their own media
-      // For admins/managers, allow filtering by owner ID
-      const ownerId = user?.role === "ADMIN" || user?.role === "MANAGER" 
-        ? filterByOwnerId || userId 
+      // For admins/managers, allow filtering by user ID
+      const targetUserId = user?.role === "ADMIN" || user?.role === "MANAGER" 
+        ? filterByUserId || userId 
         : userId;
 
       const mediaAssets = await ctx.prisma.mediaAsset.findMany({
-        where: { ownerId },
+        where: { userId: targetUserId },
         take: limit + 1, // Take an extra item to determine if there are more items
         cursor: cursor ? { id: cursor } : undefined,
         orderBy: {

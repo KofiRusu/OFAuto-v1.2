@@ -1,5 +1,5 @@
 import { setupServer } from 'msw/node';
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { mockClients } from './data/clients';
 import { mockIntegrations } from './data/integrations';
 import { mockScheduledPosts } from './data/scheduled-posts';
@@ -8,10 +8,11 @@ import { mockAutomations, mockTasks } from './data/automations';
 
 export const handlers = [
   // Client API endpoints
-  rest.get('/api/clients', (req, res, ctx) => {
-    const searchTerm = req.url.searchParams.get('search') || '';
-    const sortBy = req.url.searchParams.get('sortBy') || 'name';
-    const sortOrder = req.url.searchParams.get('sortOrder') || 'asc';
+  http.get('/api/clients', ({ request }) => {
+    const url = new URL(request.url);
+    const searchTerm = url.searchParams.get('search') || '';
+    const sortBy = url.searchParams.get('sortBy') || 'name';
+    const sortOrder = url.searchParams.get('sortOrder') || 'asc';
     
     let clients = [...mockClients];
     
@@ -35,123 +36,129 @@ export const handlers = [
       }
     });
     
-    return res(ctx.status(200), ctx.json(clients));
+    return HttpResponse.json(clients);
   }),
   
-  rest.post('/api/clients', (req, res, ctx) => {
+  http.post('/api/clients', async ({ request }) => {
+    const body = await request.json();
     const newClient = {
       id: `client-${Date.now()}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      ...req.body
+      ...body
     };
     
     mockClients.push(newClient);
-    return res(ctx.status(201), ctx.json(newClient));
+    return HttpResponse.json(newClient);
   }),
   
-  rest.get('/api/clients/:id', (req, res, ctx) => {
-    const { id } = req.params;
+  http.get('/api/clients/:id', ({ params }) => {
+    const { id } = params;
     const client = mockClients.find(c => c.id === id);
     
     if (client) {
-      return res(ctx.status(200), ctx.json(client));
+      return HttpResponse.json(client);
     }
     
-    return res(ctx.status(404), ctx.json({ error: 'Client not found' }));
+    return HttpResponse.json({ error: 'Client not found' }, { status: 404 });
   }),
   
-  rest.put('/api/clients/:id', (req, res, ctx) => {
-    const { id } = req.params;
+  http.put('/api/clients/:id', async ({ params, request }) => {
+    const { id } = params;
+    const body = await request.json();
     const clientIndex = mockClients.findIndex(c => c.id === id);
     
     if (clientIndex !== -1) {
       const updatedClient = {
         ...mockClients[clientIndex],
-        ...req.body,
+        ...body,
         updatedAt: new Date().toISOString()
       };
       
       mockClients[clientIndex] = updatedClient;
-      return res(ctx.status(200), ctx.json(updatedClient));
+      return HttpResponse.json(updatedClient);
     }
     
-    return res(ctx.status(404), ctx.json({ error: 'Client not found' }));
+    return HttpResponse.json({ error: 'Client not found' }, { status: 404 });
   }),
   
-  rest.delete('/api/clients/:id', (req, res, ctx) => {
-    const { id } = req.params;
+  http.delete('/api/clients/:id', ({ params }) => {
+    const { id } = params;
     const clientIndex = mockClients.findIndex(c => c.id === id);
     
     if (clientIndex !== -1) {
       mockClients.splice(clientIndex, 1);
-      return res(ctx.status(200), ctx.json({ message: 'Client deleted successfully' }));
+      return HttpResponse.json({ message: 'Client deleted successfully' });
     }
     
-    return res(ctx.status(404), ctx.json({ error: 'Client not found' }));
+    return HttpResponse.json({ error: 'Client not found' }, { status: 404 });
   }),
   
   // Integration API endpoints
-  rest.get('/api/integrations', (req, res, ctx) => {
-    const clientId = req.url.searchParams.get('clientId');
+  http.get('/api/integrations', ({ request }) => {
+    const url = new URL(request.url);
+    const clientId = url.searchParams.get('clientId');
     let integrations = [...mockIntegrations];
     
     if (clientId) {
       integrations = integrations.filter(i => i.clientId === clientId);
     }
     
-    return res(ctx.status(200), ctx.json(integrations));
+    return HttpResponse.json(integrations);
   }),
   
-  rest.post('/api/integrations', (req, res, ctx) => {
+  http.post('/api/integrations', async ({ request }) => {
+    const body = await request.json();
     const newIntegration = {
       id: `integration-${Date.now()}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      ...req.body
+      ...body
     };
     
     mockIntegrations.push(newIntegration);
-    return res(ctx.status(201), ctx.json(newIntegration));
+    return HttpResponse.json(newIntegration);
   }),
   
-  rest.put('/api/integrations/:id', (req, res, ctx) => {
-    const { id } = req.params;
+  http.put('/api/integrations/:id', async ({ params, request }) => {
+    const { id } = params;
+    const body = await request.json();
     const integrationIndex = mockIntegrations.findIndex(i => i.id === id);
     
     if (integrationIndex !== -1) {
       const updatedIntegration = {
         ...mockIntegrations[integrationIndex],
-        ...req.body,
+        ...body,
         updatedAt: new Date().toISOString()
       };
       
       mockIntegrations[integrationIndex] = updatedIntegration;
-      return res(ctx.status(200), ctx.json(updatedIntegration));
+      return HttpResponse.json(updatedIntegration);
     }
     
-    return res(ctx.status(404), ctx.json({ error: 'Integration not found' }));
+    return HttpResponse.json({ error: 'Integration not found' }, { status: 404 });
   }),
   
-  rest.delete('/api/integrations/:id', (req, res, ctx) => {
-    const { id } = req.params;
+  http.delete('/api/integrations/:id', ({ params }) => {
+    const { id } = params;
     const integrationIndex = mockIntegrations.findIndex(i => i.id === id);
     
     if (integrationIndex !== -1) {
       mockIntegrations.splice(integrationIndex, 1);
-      return res(ctx.status(200), ctx.json({ message: 'Integration deleted successfully' }));
+      return HttpResponse.json({ message: 'Integration deleted successfully' });
     }
     
-    return res(ctx.status(404), ctx.json({ error: 'Integration not found' }));
+    return HttpResponse.json({ error: 'Integration not found' }, { status: 404 });
   }),
   
   // Scheduled posts API endpoints
-  rest.get('/api/scheduled-posts', (req, res, ctx) => {
-    const clientId = req.url.searchParams.get('clientId');
-    const platform = req.url.searchParams.get('platform');
-    const status = req.url.searchParams.get('status');
-    const fromDate = req.url.searchParams.get('fromDate');
-    const toDate = req.url.searchParams.get('toDate');
+  http.get('/api/scheduled-posts', ({ request }) => {
+    const url = new URL(request.url);
+    const clientId = url.searchParams.get('clientId');
+    const platform = url.searchParams.get('platform');
+    const status = url.searchParams.get('status');
+    const fromDate = url.searchParams.get('fromDate');
+    const toDate = url.searchParams.get('toDate');
     
     let posts = [...mockScheduledPosts];
     
@@ -178,67 +185,70 @@ export const handlers = [
       posts = posts.filter(post => new Date(post.scheduledFor) <= toDateObj);
     }
     
-    return res(ctx.status(200), ctx.json(posts));
+    return HttpResponse.json(posts);
   }),
   
-  rest.post('/api/scheduled-posts', (req, res, ctx) => {
+  http.post('/api/scheduled-posts', async ({ request }) => {
+    const body = await request.json();
     const newPost = {
       id: `post-${Date.now()}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      ...req.body
+      ...body
     };
     
     mockScheduledPosts.push(newPost);
-    return res(ctx.status(201), ctx.json(newPost));
+    return HttpResponse.json(newPost);
   }),
   
-  rest.get('/api/scheduled-posts/:id', (req, res, ctx) => {
-    const { id } = req.params;
+  http.get('/api/scheduled-posts/:id', ({ params }) => {
+    const { id } = params;
     const post = mockScheduledPosts.find(p => p.id === id);
     
     if (post) {
-      return res(ctx.status(200), ctx.json(post));
+      return HttpResponse.json(post);
     }
     
-    return res(ctx.status(404), ctx.json({ error: 'Scheduled post not found' }));
+    return HttpResponse.json({ error: 'Scheduled post not found' }, { status: 404 });
   }),
   
-  rest.put('/api/scheduled-posts/:id', (req, res, ctx) => {
-    const { id } = req.params;
+  http.put('/api/scheduled-posts/:id', async ({ params, request }) => {
+    const { id } = params;
+    const body = await request.json();
     const postIndex = mockScheduledPosts.findIndex(p => p.id === id);
     
     if (postIndex !== -1) {
       const updatedPost = {
         ...mockScheduledPosts[postIndex],
-        ...req.body,
+        ...body,
         updatedAt: new Date().toISOString()
       };
       
       mockScheduledPosts[postIndex] = updatedPost;
-      return res(ctx.status(200), ctx.json(updatedPost));
+      return HttpResponse.json(updatedPost);
     }
     
-    return res(ctx.status(404), ctx.json({ error: 'Scheduled post not found' }));
+    return HttpResponse.json({ error: 'Scheduled post not found' }, { status: 404 });
   }),
   
-  rest.delete('/api/scheduled-posts/:id', (req, res, ctx) => {
-    const { id } = req.params;
+  http.delete('/api/scheduled-posts/:id', ({ params }) => {
+    const { id } = params;
     const postIndex = mockScheduledPosts.findIndex(p => p.id === id);
     
     if (postIndex !== -1) {
       mockScheduledPosts.splice(postIndex, 1);
-      return res(ctx.status(200), ctx.json({ message: 'Scheduled post deleted successfully' }));
+      return HttpResponse.json({ message: 'Scheduled post deleted successfully' });
     }
     
-    return res(ctx.status(404), ctx.json({ error: 'Scheduled post not found' }));
+    return HttpResponse.json({ error: 'Scheduled post not found' }, { status: 404 });
   }),
   
   // Campaign API endpoints
-  rest.get('/api/campaigns', (req, res, ctx) => {
-    const clientId = req.url.searchParams.get('clientId');
-    const platform = req.url.searchParams.get('platform');
-    const status = req.url.searchParams.get('status');
+  http.get('/api/campaigns', ({ request }) => {
+    const url = new URL(request.url);
+    const clientId = url.searchParams.get('clientId');
+    const platform = url.searchParams.get('platform');
+    const status = url.searchParams.get('status');
     
     let campaigns = [...mockCampaigns];
     
@@ -254,67 +264,70 @@ export const handlers = [
       campaigns = campaigns.filter(c => c.status === status);
     }
     
-    return res(ctx.status(200), ctx.json(campaigns));
+    return HttpResponse.json(campaigns);
   }),
   
-  rest.post('/api/campaigns', (req, res, ctx) => {
+  http.post('/api/campaigns', async ({ request }) => {
+    const body = await request.json();
     const newCampaign = {
       id: `campaign-${Date.now()}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      ...req.body
+      ...body
     };
     
     mockCampaigns.push(newCampaign);
-    return res(ctx.status(201), ctx.json(newCampaign));
+    return HttpResponse.json(newCampaign);
   }),
   
-  rest.get('/api/campaigns/:id', (req, res, ctx) => {
-    const { id } = req.params;
+  http.get('/api/campaigns/:id', ({ params }) => {
+    const { id } = params;
     const campaign = mockCampaigns.find(c => c.id === id);
     
     if (campaign) {
-      return res(ctx.status(200), ctx.json(campaign));
+      return HttpResponse.json(campaign);
     }
     
-    return res(ctx.status(404), ctx.json({ error: 'Campaign not found' }));
+    return HttpResponse.json({ error: 'Campaign not found' }, { status: 404 });
   }),
   
-  rest.put('/api/campaigns/:id', (req, res, ctx) => {
-    const { id } = req.params;
+  http.put('/api/campaigns/:id', async ({ params, request }) => {
+    const { id } = params;
+    const body = await request.json();
     const campaignIndex = mockCampaigns.findIndex(c => c.id === id);
     
     if (campaignIndex !== -1) {
       const updatedCampaign = {
         ...mockCampaigns[campaignIndex],
-        ...req.body,
+        ...body,
         updatedAt: new Date().toISOString()
       };
       
       mockCampaigns[campaignIndex] = updatedCampaign;
-      return res(ctx.status(200), ctx.json(updatedCampaign));
+      return HttpResponse.json(updatedCampaign);
     }
     
-    return res(ctx.status(404), ctx.json({ error: 'Campaign not found' }));
+    return HttpResponse.json({ error: 'Campaign not found' }, { status: 404 });
   }),
   
-  rest.delete('/api/campaigns/:id', (req, res, ctx) => {
-    const { id } = req.params;
+  http.delete('/api/campaigns/:id', ({ params }) => {
+    const { id } = params;
     const campaignIndex = mockCampaigns.findIndex(c => c.id === id);
     
     if (campaignIndex !== -1) {
       mockCampaigns.splice(campaignIndex, 1);
-      return res(ctx.status(200), ctx.json({ message: 'Campaign deleted successfully' }));
+      return HttpResponse.json({ message: 'Campaign deleted successfully' });
     }
     
-    return res(ctx.status(404), ctx.json({ error: 'Campaign not found' }));
+    return HttpResponse.json({ error: 'Campaign not found' }, { status: 404 });
   }),
   
   // Automation API endpoints
-  rest.get('/api/automations', (req, res, ctx) => {
-    const clientId = req.url.searchParams.get('clientId');
-    const triggerType = req.url.searchParams.get('triggerType');
-    const isActive = req.url.searchParams.get('isActive');
+  http.get('/api/automations', ({ request }) => {
+    const url = new URL(request.url);
+    const clientId = url.searchParams.get('clientId');
+    const triggerType = url.searchParams.get('triggerType');
+    const isActive = url.searchParams.get('isActive');
     
     let automations = [...mockAutomations];
     
@@ -331,72 +344,74 @@ export const handlers = [
       automations = automations.filter(a => a.isActive === active);
     }
     
-    return res(ctx.status(200), ctx.json(automations));
+    return HttpResponse.json(automations);
   }),
   
-  rest.post('/api/automations', (req, res, ctx) => {
+  http.post('/api/automations', async ({ request }) => {
+    const body = await request.json();
     const newAutomation = {
       id: `automation-${Date.now()}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      ...req.body
+      ...body
     };
     
     mockAutomations.push(newAutomation);
-    return res(ctx.status(201), ctx.json(newAutomation));
+    return HttpResponse.json(newAutomation);
   }),
   
-  rest.get('/api/automations/:id', (req, res, ctx) => {
-    const { id } = req.params;
+  http.get('/api/automations/:id', ({ params }) => {
+    const { id } = params;
     const automation = mockAutomations.find(a => a.id === id);
     
     if (automation) {
-      return res(ctx.status(200), ctx.json(automation));
+      return HttpResponse.json(automation);
     }
     
-    return res(ctx.status(404), ctx.json({ error: 'Automation not found' }));
+    return HttpResponse.json({ error: 'Automation not found' }, { status: 404 });
   }),
   
-  rest.put('/api/automations/:id', (req, res, ctx) => {
-    const { id } = req.params;
+  http.put('/api/automations/:id', async ({ params, request }) => {
+    const { id } = params;
+    const body = await request.json();
     const automationIndex = mockAutomations.findIndex(a => a.id === id);
     
     if (automationIndex !== -1) {
       const updatedAutomation = {
         ...mockAutomations[automationIndex],
-        ...req.body,
+        ...body,
         updatedAt: new Date().toISOString()
       };
       
       mockAutomations[automationIndex] = updatedAutomation;
-      return res(ctx.status(200), ctx.json(updatedAutomation));
+      return HttpResponse.json(updatedAutomation);
     }
     
-    return res(ctx.status(404), ctx.json({ error: 'Automation not found' }));
+    return HttpResponse.json({ error: 'Automation not found' }, { status: 404 });
   }),
   
-  rest.delete('/api/automations/:id', (req, res, ctx) => {
-    const { id } = req.params;
+  http.delete('/api/automations/:id', ({ params }) => {
+    const { id } = params;
     const automationIndex = mockAutomations.findIndex(a => a.id === id);
     
     if (automationIndex !== -1) {
       mockAutomations.splice(automationIndex, 1);
-      return res(ctx.status(200), ctx.json({ message: 'Automation deleted successfully' }));
+      return HttpResponse.json({ message: 'Automation deleted successfully' });
     }
     
-    return res(ctx.status(404), ctx.json({ error: 'Automation not found' }));
+    return HttpResponse.json({ error: 'Automation not found' }, { status: 404 });
   }),
   
-  rest.post('/api/automations/:id/execute', (req, res, ctx) => {
-    const { id } = req.params;
+  http.post('/api/automations/:id/execute', ({ params }) => {
+    const { id } = params;
     const automation = mockAutomations.find(a => a.id === id);
     
     if (!automation) {
-      return res(ctx.status(404), ctx.json({ error: 'Automation not found' }));
+      return HttpResponse.json({ error: 'Automation not found' }, { status: 404 });
     }
     
     if (!automation.isActive) {
-      return res(ctx.status(400), ctx.json({ error: 'Cannot execute inactive automation' }));
+      return HttpResponse.json({ error: 'Cannot execute inactive automation' }, { status: 400 });
     }
     
     // Create mock tasks for this automation execution
@@ -426,17 +441,18 @@ export const handlers = [
       updatedAt: new Date().toISOString()
     };
     
-    return res(ctx.status(200), ctx.json({
+    return HttpResponse.json({
       message: 'Automation execution initiated',
       taskIds,
       executedAt: new Date().toISOString()
-    }));
+    });
   }),
   
-  rest.get('/api/automations/tasks', (req, res, ctx) => {
-    const automationId = req.url.searchParams.get('automationId');
-    const status = req.url.searchParams.get('status');
-    const platform = req.url.searchParams.get('platform');
+  http.get('/api/automations/tasks', ({ request }) => {
+    const url = new URL(request.url);
+    const automationId = url.searchParams.get('automationId');
+    const status = url.searchParams.get('status');
+    const platform = url.searchParams.get('platform');
     
     let tasks = [...mockTasks];
     
@@ -452,7 +468,7 @@ export const handlers = [
       tasks = tasks.filter(t => t.platform === platform);
     }
     
-    return res(ctx.status(200), ctx.json({
+    return HttpResponse.json({
       tasks,
       pagination: {
         total: tasks.length,
@@ -460,7 +476,7 @@ export const handlers = [
         offset: 0,
         hasMore: false
       }
-    }));
+    });
   }),
 ];
 

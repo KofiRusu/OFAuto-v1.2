@@ -58,4 +58,7 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # AWS
-AWSCLIV2.pkg 
+AWSCLIV2.pkg
+
+# KofiRusu/AAA0.1/
+KofiRusu/AAA0.1/ 

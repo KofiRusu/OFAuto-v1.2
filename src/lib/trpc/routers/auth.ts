@@ -15,7 +15,7 @@ import {
   PasswordResetSchema
 } from '@/lib/schemas/auth';
 import { randomBytes } from 'crypto';
-import { env } from '@/lib/env';
+import { env } from '@/lib/parsedEnv';
 import { UserRole } from '@prisma/client';
 
 /**

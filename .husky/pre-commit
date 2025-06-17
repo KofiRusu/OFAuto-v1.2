@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Compare .env.example with schema-generated version
+echo "🔍 Checking .env.example for drift..."
+npx tsx scripts/compare-env-example.ts
+
+# If comparison fails, the script will exit with non-zero code
+# and the commit will be blocked
+
+npm test

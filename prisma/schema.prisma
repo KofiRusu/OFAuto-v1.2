@@ -1,3 +1,6 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -40,10 +43,9 @@ model User {
   chatbotPersonas   ChatbotPersona[]    // Relation for Phase 10
   chatbotAutomations ChatbotAutomation[] // Relation for Phase 10
   activityLogs      ActivityLog[]
-  financialMetrics  FinancialMetric[]
   driveCredentials  DriveCredential[]   // Relation for Phase 10c
   performanceReports PerformanceReport[] // Relation for Phase 10d
-  platformAccess    PlatformAccess[]    // Relation for Phase 10d
+  platformAccess    PlatformAccess[]    // Relation for Phase 10d Step 5
   notifications     Notification[]      // Relation for Phase 10d Step 5
   kpis              KPI[]
   linktreeConfig    LinktreeConfig?     // Relation for Phase 10d Step 8
@@ -67,47 +69,64 @@ model DriveCredential {
 }
 
 model Client {
-  id          String       @id @default(uuid())
+  id          String            @id @default(cuid())
   name        String
+  contactName String?
   email       String?
   phone       String?
   userId      String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  status      String       @default("active")
-  referralCode String?     @unique
-  orgSettings Json?        @default("{}")
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  status      String            @default("active")
+  referralCode String?         @unique
+  orgSettings Json?             @default("{}")
   automations Automation[]
   campaigns   Campaign[]
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   platforms   Platform[]
   crmConnections CrmConnection[]
   quickBooksConnections QuickBooksConnection[]
-  financialMetrics FinancialMetric[]
+  metrics     EngagementMetric[]
+  financials  FinancialMetric[]
 
   @@index([userId])
 }
 
 model Platform {
-  id            String         @id @default(cuid())
-  type          String
+  id            String          @id @default(cuid())
+  type          PlatformType
   name          String
+  status        ConnectionStatus @default(CONNECTED)
+  connectionDetails Json?
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId        String
+  client        Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
   clientId      String?
-  status        PlatformStatus @default(PENDING)
-  lastCheckedAt DateTime?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  posts         PostPlatform[]
+  engagement    EngagementMetric[]
+  financials    FinancialMetric[]
+  credentials   PlatformCredential?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
   username      String?
-  client        Client?        @relation(fields: [clientId], references: [id])
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  campaigns     Campaign[]     @relation("CampaignToPlatform")
+  lastCheckedAt DateTime?
+  campaigns     Campaign[]      @relation("CampaignToPlatform")
   accessControl PlatformAccess[] // Relation for Phase 10d
 
   @@index([userId])
   @@index([clientId])
   @@index([type])
   @@index([status])
+}
+
+model PlatformCredential {
+  id            String   @id @default(cuid())
+  platform      Platform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  platformId    String   @unique
+  encryptedData String   // Encrypted credential data
+  expiresAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model Automation {
@@ -302,14 +321,44 @@ model ReferralBonus {
 }
 
 model MediaAsset {
-  id          String    @id @default(uuid())
-  url         String
-  ownerId     String
-  createdAt   DateTime  @default(now())
-  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  watermarks  WatermarkedMedia[]
+  id               String    @id @default(uuid())
+  userId           String
+  url              String
+  type             String    // image, video, audio
+  filename         String
+  mimeType         String?
+  metadata         Json?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  // New fields for async processing:
+  status           String    @default("PENDING")    // READY, PROCESSING, FAILED
+  taskId           String?   // background job reference
+  fileSize         Int?
+  width            Int?
+  height           Int?
+  duration         Int?      // seconds for video
+  processedAt      DateTime?
+  processingTimeMs Int?
+  // Relations
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  watermarkedMedia WatermarkedMedia[]
+  chunks           MediaChunk[]
   
-  @@index([ownerId])
+  @@index([userId])
+  @@index([status])
+}
+
+model MediaChunk {
+  id         String     @id @default(cuid())
+  mediaId    String   
+  media      MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  chunkIndex Int
+  size       Int
+  data       Bytes?    // Optional: store chunk data temporarily
+  uploadedAt DateTime  @default(now())
+  
+  @@unique([mediaId, chunkIndex])
+  @@index([mediaId])
 }
 
 model WatermarkProfile {
@@ -383,7 +432,6 @@ model ComplianceReport {
   
   @@index([reporterId])
   @@index([status])
-  @@index([type])
 }
 
 model TakedownRequest {
@@ -513,25 +561,19 @@ model PerformanceReport {
 }
 
 model FinancialMetric {
-  id          String   @id @default(uuid())
-  userId      String?
-  clientId    String?
-  category    String
-  amount      Float
-  currency    String   @default("USD")
-  date        DateTime
-  description String?
-  trend       Float?
-  variance    Float?
-  createdAt   DateTime @default(now())
-  
-  user        User?    @relation(fields: [userId], references: [id])
-  client      Client?  @relation(fields: [clientId], references: [id])
-  
-  @@index([userId])
-  @@index([clientId])
-  @@index([category])
-  @@index([date])
+  id            String   @id @default(cuid())
+  platform      Platform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  platformId    String
+  client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId      String
+  date          DateTime
+  revenue       Float    @default(0)
+  subscriptions Int      @default(0)
+  conversionRate Float?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([platformId, clientId, date])
 }
 
 model PlatformAccess {
@@ -621,6 +663,62 @@ model PasswordReset {
   @@index([token])
 }
 
+model ScheduledPost {
+  id          String        @id @default(cuid())
+  title       String
+  content     String
+  media       Json?         // Array of media URLs
+  scheduleTime DateTime
+  status      PostStatus    @default(DRAFT)
+  platforms   PostPlatform[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model PostPlatform {
+  id            String        @id @default(cuid())
+  post          ScheduledPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId        String
+  platform      Platform      @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  platformId    String
+  platformStatus PostStatus    @default(DRAFT)
+  platformUrls  Json?         // URLs where the post was published
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([postId, platformId])
+}
+
+model EngagementMetric {
+  id            String   @id @default(cuid())
+  platform      Platform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  platformId    String
+  client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId      String
+  date          DateTime
+  likes         Int      @default(0)
+  comments      Int      @default(0)
+  shares        Int      @default(0)
+  views         Int      @default(0)
+  clickThroughs Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([platformId, clientId, date])
+}
+
+model AuditLog {
+  id            String      @id @default(cuid())
+  action        String
+  entityType    String
+  entityId      String
+  details       Json?
+  ipAddress     String?
+  userAgent     String?
+  userId        String?
+  createdAt     DateTime    @default(now())
+}
+
 enum UserRole {
   ADMIN
   MANAGER
@@ -707,4 +805,21 @@ enum TaxFormType {
   US_1099
   EU_VAT
   OTHER
+}
+
+enum PlatformType {
+  ONLYFANS
+  FANSLY
+  INSTAGRAM
+  TWITTER
+  KOFI
+  PATREON
+  GUMROAD
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  FAILED
 }

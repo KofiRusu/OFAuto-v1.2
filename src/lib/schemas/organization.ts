@@ -79,4 +79,44 @@ export const DEFAULT_ORG_SETTINGS = {
     paymentTerms: 'net30',
     taxRate: 0,
   },
-}; 
+};
+
+// Schema for basic organization settings
+export const organizationSettingsSchema = z.object({
+  displayName: z.string().min(2).max(100).optional(),
+  logo: z.string().url().optional(),
+  primaryColor: z.string().regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/).optional(),
+  secondaryColor: z.string().regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/).optional(),
+  contactEmail: z.string().email().optional(),
+  supportPhone: z.string().optional(),
+  timezone: z.string().optional(),
+  defaultLanguage: z.string().optional(),
+  socialLinks: z.object({
+    twitter: z.string().url().optional(),
+    instagram: z.string().url().optional(),
+    facebook: z.string().url().optional(),
+    linkedin: z.string().url().optional(),
+    tiktok: z.string().url().optional(),
+  }).optional(),
+});
+
+// Schema for referral settings
+export const referralSettingsSchema = z.object({
+  referralCode: z.string().min(3).max(20).optional(),
+  referralBonus: z.number().min(0).optional(),
+  referralPeriodDays: z.number().int().min(0).optional(),
+  maxReferrals: z.number().int().min(0).optional(),
+  termsAccepted: z.boolean().optional(),
+});
+
+// Schema for update organization settings
+export const updateOrganizationSettingsSchema = z.object({
+  clientId: z.string(),
+  settings: organizationSettingsSchema,
+});
+
+// Schema for update referral code
+export const updateReferralCodeSchema = z.object({
+  clientId: z.string(),
+  referralCode: z.string().min(3).max(20).nullable(),
+}); 

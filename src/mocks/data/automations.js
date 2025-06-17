@@ -1,4 +1,4 @@
-import { TriggerType } from '@/lib/orchestration/triggerEngine';
+import { triggerEngine } from '../../lib/orchestration/triggerEngine';
 
 export const mockAutomations = [
   {
@@ -6,7 +6,7 @@ export const mockAutomations = [
     name: 'Subscriber Re-engagement',
     description: 'Automatically message subscribers who haven\'t engaged in 30 days',
     clientId: 'client-1',
-    triggerType: TriggerType.SUBSCRIPTION_DIP,
+    triggerType: triggerEngine.TriggerType.SUBSCRIPTION_DIP,
     conditions: {
       threshold: 0.05,
       timeFrame: 'week'
@@ -32,7 +32,7 @@ export const mockAutomations = [
     name: 'ROI Optimization',
     description: 'Adjust pricing when ROI exceeds targets',
     clientId: 'client-1',
-    triggerType: TriggerType.ROI_THRESHOLD,
+    triggerType: triggerEngine.TriggerType.ROI_THRESHOLD,
     conditions: {
       threshold: 2.0,
       timeFrame: 'month'
@@ -59,7 +59,7 @@ export const mockAutomations = [
     name: 'Underperforming Campaign Adjuster',
     description: 'Boost content visibility when campaigns aren\'t meeting goals',
     clientId: 'client-2',
-    triggerType: TriggerType.CAMPAIGN_UNDERPERFORMANCE,
+    triggerType: triggerEngine.TriggerType.CAMPAIGN_UNDERPERFORMANCE,
     conditions: {
       threshold: 0.3,
       timeFrame: 'week'
@@ -84,7 +84,7 @@ export const mockAutomations = [
     name: 'Content Performance Booster',
     description: 'Promote high-performing content to maximize engagement',
     clientId: 'client-3',
-    triggerType: TriggerType.CONTENT_PERFORMANCE,
+    triggerType: triggerEngine.TriggerType.CONTENT_PERFORMANCE,
     conditions: {
       threshold: 0.25,
       timeFrame: 'week',
@@ -120,7 +120,7 @@ export const mockAutomations = [
     name: 'A/B Test Result Applier',
     description: 'Apply winning variant from completed A/B tests automatically',
     clientId: 'client-3',
-    triggerType: TriggerType.EXPERIMENT_CONCLUSION,
+    triggerType: triggerEngine.TriggerType.EXPERIMENT_CONCLUSION,
     conditions: {
       minConfidence: 0.9,
       minImpressions: 1000

@@ -139,7 +139,7 @@ export default function Dashboard() {
                           </span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900">Campaign "Summer Promotion" started</p>
+                          <p className="text-sm font-medium text-gray-900">Campaign &quot;Summer Promotion&quot; started</p>
                           <p className="text-sm text-gray-500">2 hours ago</p>
                         </div>
                       </div>
@@ -165,7 +165,7 @@ export default function Dashboard() {
                           </span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900">New client "Fansly Client 1" added</p>
+                          <p className="text-sm font-medium text-gray-900">New client &quot;Fansly Client 1&quot; added</p>
                           <p className="text-sm text-gray-500">1 day ago</p>
                         </div>
                       </div>

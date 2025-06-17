@@ -9,6 +9,13 @@ import {
   DEFAULT_ORG_SETTINGS
 } from '@/lib/schemas/organization';
 import { organizationService } from '@/lib/services/organizationService';
+import { prisma } from "@/lib/db";
+import { 
+  updateOrganizationSettingsSchema, 
+  updateReferralCodeSchema, 
+  organizationSettingsSchema, 
+  referralSettingsSchema
+} from "@/lib/schemas/organization";
 
 // Create manager-only procedure
 const managerProcedure = protectedProcedure.use(async ({ ctx, next }) => {
@@ -35,39 +42,26 @@ export const organizationRouter = createTRPCRouter({
    * Manager/Admin only
    */
   getOrgSettings: managerProcedure
-    .input(z.object({ clientId: z.string().uuid() }))
-    .query(async ({ ctx, input }) => {
-      const { prisma, auth } = ctx;
-      const { clientId } = input;
-      
-      // Check if the client exists and belongs to the user
+    .input(z.object({ clientId: z.string() }))
+    .query(async ({ input, ctx }) => {
       const client = await prisma.client.findUnique({
-        where: { 
-          id: clientId,
-          ...(auth.userRole !== UserRole.ADMIN ? { userId: auth.userId } : {})
-        },
+        where: { id: input.clientId },
         select: {
-          id: true,
-          name: true,
           orgSettings: true,
+          id: true,
         },
       });
-      
+
       if (!client) {
         throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Client not found or you do not have access to this client',
+          code: "NOT_FOUND",
+          message: "Client not found",
         });
       }
-      
-      // Merge with default settings to ensure all properties exist
-      const settings = organizationService.mergeWithDefaultSettings(
-        client.orgSettings as Record<string, any> | null
-      );
-      
+
       return {
         clientId: client.id,
-        settings,
+        settings: client.orgSettings || {},
       };
     }),
   
@@ -76,46 +70,33 @@ export const organizationRouter = createTRPCRouter({
    * Manager/Admin only
    */
   updateOrgSettings: managerProcedure
-    .input(OrgSettingsSchema)
-    .mutation(async ({ ctx, input }) => {
-      const { prisma, auth, logger } = ctx;
-      const { clientId, settings } = input;
-      
-      // Check if the client exists and belongs to the user
+    .input(updateOrganizationSettingsSchema)
+    .mutation(async ({ input, ctx }) => {
       const client = await prisma.client.findUnique({
-        where: { 
-          id: clientId,
-          ...(auth.userRole !== UserRole.ADMIN ? { userId: auth.userId } : {})
-        },
-        select: { id: true },
+        where: { id: input.clientId },
       });
-      
+
       if (!client) {
         throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Client not found or you do not have access to this client',
+          code: "NOT_FOUND",
+          message: "Client not found",
         });
       }
-      
-      logger.info('Updating organization settings', {
-        clientId,
-        userId: auth.userId,
-      });
-      
-      // Update the client's organization settings
+
       const updatedClient = await prisma.client.update({
-        where: { id: clientId },
-        data: { orgSettings: settings },
+        where: { id: input.clientId },
+        data: {
+          orgSettings: input.settings,
+        },
         select: {
           id: true,
-          name: true,
           orgSettings: true,
         },
       });
-      
+
       return {
         clientId: updatedClient.id,
-        settings: updatedClient.orgSettings as Record<string, any>,
+        settings: updatedClient.orgSettings,
       };
     }),
   
@@ -124,51 +105,39 @@ export const organizationRouter = createTRPCRouter({
    * Manager/Admin only
    */
   generateReferralCode: managerProcedure
-    .input(GenerateReferralCodeSchema)
-    .mutation(async ({ ctx, input }) => {
-      const { prisma, auth, logger } = ctx;
-      const { clientId } = input;
-      
-      // Check if the client exists and belongs to the user
+    .input(z.object({ clientId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
       const client = await prisma.client.findUnique({
-        where: { 
-          id: clientId,
-          ...(auth.userRole !== UserRole.ADMIN ? { userId: auth.userId } : {})
-        },
-        select: { id: true },
+        where: { id: input.clientId },
       });
-      
+
       if (!client) {
         throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Client not found or you do not have access to this client',
+          code: "NOT_FOUND",
+          message: "Client not found",
         });
       }
-      
-      logger.info('Generating referral code', {
-        clientId,
-        userId: auth.userId,
+
+      // Generate a random code with client prefix
+      const prefix = client.name.substring(0, 3).toUpperCase();
+      const randomPart = Math.random().toString(36).substring(2, 7).toUpperCase();
+      const referralCode = `${prefix}-${randomPart}`;
+
+      const updatedClient = await prisma.client.update({
+        where: { id: input.clientId },
+        data: {
+          referralCode: referralCode,
+        },
+        select: {
+          id: true,
+          referralCode: true,
+        },
       });
-      
-      // Generate a new referral code
-      try {
-        const referralCode = await organizationService.createReferralCode(clientId, prisma);
-        
-        return {
-          clientId,
-          referralCode,
-        };
-      } catch (error) {
-        logger.error('Error generating referral code', {
-          clientId,
-          error,
-        });
-        
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to generate referral code',
-        });
-      }
+
+      return {
+        clientId: updatedClient.id,
+        referralCode: updatedClient.referralCode,
+      };
     }),
   
   /**
